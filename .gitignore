@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+theater_props.db
+inventory_*.json
+*.odt
+*.odt#
