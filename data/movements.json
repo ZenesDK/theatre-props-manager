@@ -1,0 +1,11 @@
+[
+  {
+    "id": 1,
+    "prop_id": 4,
+    "movement_type": "выдача",
+    "location_id": 2,
+    "employee_id": 1,
+    "purpose": "репетиция спектакля «Маскарад»",
+    "moved_at": "2026-09-15T14:30:00"
+  }
+]

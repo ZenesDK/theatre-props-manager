@@ -2,9 +2,12 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+*.db
+reports/
+inventory_*.json
+.pytest_cache/
 .idea/
 .vscode/
-theater_props.db
-inventory_*.json
 *.odt
 *.odt#
+flake8_report.txt
