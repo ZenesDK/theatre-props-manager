@@ -9,6 +9,13 @@ from datetime import date, datetime
 from typing import Callable
 
 from directory import add_employee, add_location, find_location_by_name
+from inventory import (
+    build_report,
+    mark_missing_lost,
+    save_report,
+    select_props_for_check,
+    split_by_answers,
+)
 from movements import MOVEMENT_ISSUE, issue_prop, return_prop
 from props import (
     CATEGORIES,
@@ -31,6 +38,7 @@ from reservations import (
     get_reservation_status,
     is_prop_available,
 )
+from stats import get_stats
 from storage import (
     load_employees,
     load_locations,
@@ -43,7 +51,13 @@ from storage import (
     save_props,
     save_reservations,
 )
-from utils import choose_from_list, input_date, input_int, input_nonempty
+from utils import (
+    choose_from_list,
+    input_date,
+    input_int,
+    input_nonempty,
+    input_yes_no,
+)
 
 # --- Вспомогательные функции выбора и вывода ---
 
@@ -347,16 +361,15 @@ def check_availability_flow(
     available = is_prop_available(
         props, reservations, prop["id"], target_date
     )
+    if available:
+        print(get_reservation_status(available))
+        return
+    if prop["status"] in BLOCKING_STATUSES:
+        print(f"Предмет недоступен (статус: {prop['status']}).")
+        return
+    conflict = find_reservation(reservations, prop["id"], target_date)
     print(get_reservation_status(available))
-    if not available:
-        conflict = find_reservation(reservations, prop["id"], target_date)
-        if conflict is not None:
-            print(
-                f"На эту дату предмет уже забронирован: "
-                f"{conflict['production']}."
-            )
-        else:
-            print(f"Предмет недоступен (статус: {prop['status']}).")
+    print(f"На эту дату предмет уже забронирован: {conflict['production']}.")
 
 
 def create_reservation_flow(
@@ -458,6 +471,75 @@ def show_reservations_flow(
     for reservation in ordered:
         print(f"  {format_reservation(reservation, props)}")
 
+# --- Инвентаризация и статистика ---
+
+
+def run_inventory_flow(
+    props: dict[int, dict],
+    locations: dict[int, dict],
+) -> None:
+    """Диалог инвентаризации по выбранной локации."""
+    print("\n--- Инвентаризация ---")
+    location = choose_location(locations, "Локация для сверки:")
+    if location is None:
+        print("Инвентаризация отменена.")
+        return
+    to_check = select_props_for_check(props, location["id"])
+    if not to_check:
+        print(f"На локации «{location['name']}» нечего сверять.")
+        return
+    print(f"К сверке: {len(to_check)} шт. Ответы: y (да) / n (нет).")
+    answers: dict[int, bool] = {}
+    for prop in to_check:
+        label = f"[{prop['inventory_number']}] {prop['name']}"
+        answers[prop["id"]] = input_yes_no(f"{label} — найден? ")
+    found, missing = split_by_answers(to_check, answers)
+    print("\n===== ОТЧЁТ ОБ ИНВЕНТАРИЗАЦИИ =====")
+    print(f"Локация: {location['name']}")
+    print(f"Дата: {datetime.now():%d.%m.%Y %H:%M}")
+    print(
+        f"Числилось: {len(to_check)} | Найдено: {len(found)} | "
+        f"Не найдено: {len(missing)}"
+    )
+    if missing:
+        print("Расхождения (числится, но не найдено):")
+        for prop in missing:
+            print(f"  [{prop['inventory_number']}] {prop['name']}")
+        if input_yes_no("Пометить ненайденные как «утерян»? "):
+            updated = mark_missing_lost(props, missing)
+            save_props(props)
+            print(f"Статус «утерян» присвоен {updated} предметам.")
+    report = build_report(location["name"], found, missing)
+    path = save_report(report)
+    if path is not None:
+        print(f"Отчёт сохранён: {path}")
+
+
+def show_stats_flow(
+    props: dict[int, dict],
+    locations: dict[int, dict],
+) -> None:
+    """Вывести сводную статистику каталога."""
+    print("\n--- Статистика реквизита ---")
+    stats = get_stats(props, locations)
+    print(f"Всего предметов: {stats['total']}")
+    print(f"Требуют ремонта: {stats['needs_repair']}")
+    print("\nПо статусам:")
+    print_counts(stats["by_status"])
+    print("\nПо категориям:")
+    print_counts(stats["by_category"])
+    print("\nПо локациям:")
+    print_counts(stats["by_location"])
+
+
+def print_counts(counts: dict[str, int]) -> None:
+    """Вывести распределение значений с количеством."""
+    if not counts:
+        print("  —")
+        return
+    for key, count in sorted(counts.items()):
+        print(f"  {key}: {count}")
+
 # --- Справочники: локации и сотрудники ---
 
 
@@ -535,10 +617,12 @@ def main() -> None:
         8: lambda: create_reservation_flow(props, reservations, locations),
         9: lambda: cancel_reservation_flow(reservations, props),
         10: lambda: show_reservations_flow(reservations, props),
-        11: lambda: show_locations(locations),
-        12: lambda: add_location_flow(locations),
-        13: lambda: show_employees(employees),
-        14: lambda: add_employee_flow(employees),
+        11: lambda: run_inventory_flow(props, locations),
+        12: lambda: show_stats_flow(props, locations),
+        13: lambda: show_locations(locations),
+        14: lambda: add_location_flow(locations),
+        15: lambda: show_employees(employees),
+        16: lambda: add_employee_flow(employees),
     }
 
     while True:
@@ -556,11 +640,14 @@ def main() -> None:
         print(" 8. Забронировать предмет")
         print(" 9. Отменить бронирование")
         print("10. Список бронирований")
+        print("УЧЁТ")
+        print("11. Инвентаризация")
+        print("12. Статистика")
         print("СПРАВОЧНИКИ")
-        print("11. Локации: список")
-        print("12. Локации: добавить")
-        print("13. Сотрудники: список")
-        print("14. Сотрудники: добавить")
+        print("13. Локации: список")
+        print("14. Локации: добавить")
+        print("15. Сотрудники: список")
+        print("16. Сотрудники: добавить")
         print(" 0. Выход")
         choice = input_int("Ваш выбор: ")
         if choice == 0:

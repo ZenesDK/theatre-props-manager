@@ -42,6 +42,21 @@ def input_date(prompt: str) -> date:
             print("  Введите дату в формате ДД.ММ.ГГГГ, например 05.11.2026.")
 
 
+def input_yes_no(prompt: str) -> bool:
+    """Запросить у пользователя ответ «да» или «нет».
+
+    Принимаются y, д, да (истина) и n, н, нет (ложь);
+    любой другой ввод приводит к повторному запросу.
+    """
+    while True:
+        answer = input(prompt).strip().lower()
+        if answer in ("y", "д", "да"):
+            return True
+        if answer in ("n", "н", "нет"):
+            return False
+        print("  Введите y (да) или n (нет).")
+
+
 def choose_from_list(
     items: list[Any],
     title: str,

@@ -7,9 +7,10 @@
 
 from datetime import date, datetime
 
+from props import STATUS_LOST, STATUS_WRITTEN_OFF
 from utils import next_id
 
-BLOCKING_STATUSES = ("утерян", "списан")
+BLOCKING_STATUSES = (STATUS_LOST, STATUS_WRITTEN_OFF)
 
 
 def find_reservation(

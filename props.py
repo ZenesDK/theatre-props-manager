@@ -19,10 +19,20 @@ CATEGORIES = [
     "прочее",
 ]
 CONDITIONS = ["новое", "хорошее", "изношено", "требует ремонта"]
-STATUSES = ["на складе", "выдан", "в ремонте", "утерян", "списан"]
 
 STATUS_IN_STOCK = "на складе"
 STATUS_ISSUED = "выдан"
+STATUS_IN_REPAIR = "в ремонте"
+STATUS_LOST = "утерян"
+STATUS_WRITTEN_OFF = "списан"
+
+STATUSES = [
+    STATUS_IN_STOCK,
+    STATUS_ISSUED,
+    STATUS_IN_REPAIR,
+    STATUS_LOST,
+    STATUS_WRITTEN_OFF,
+]
 
 SORT_OPTIONS = ["название", "категория", "состояние", "статус"]
 _SORT_KEYS = {
