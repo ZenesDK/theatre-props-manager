@@ -5,19 +5,31 @@
 Запуск: python main.py
 """
 
+from datetime import date, datetime
 from typing import Callable
 
 from directory import add_employee, add_location, find_location_by_name
+from movements import MOVEMENT_ISSUE, issue_prop, return_prop
 from props import (
     CATEGORIES,
     CONDITIONS,
     SORT_OPTIONS,
     STATUSES,
+    STATUS_IN_STOCK,
+    STATUS_ISSUED,
     add_prop,
     filter_props,
     find_prop_by_inventory_number,
     find_props,
     sort_props,
+)
+from reservations import (
+    BLOCKING_STATUSES,
+    cancel_reservation,
+    create_reservation,
+    find_reservation,
+    get_reservation_status,
+    is_prop_available,
 )
 from storage import (
     load_employees,
@@ -27,52 +39,62 @@ from storage import (
     load_reservations,
     save_employees,
     save_locations,
+    save_movements,
     save_props,
+    save_reservations,
 )
-from utils import choose_from_list, input_int, input_nonempty
+from utils import choose_from_list, input_date, input_int, input_nonempty
 
-# --- Справочники: локации и сотрудники ---
-
-
-def show_locations(locations: dict[int, dict]) -> None:
-    """Вывести список локаций."""
-    print("\n--- Локации ---")
-    if not locations:
-        print("  Справочник пуст.")
-        return
-    for location in locations.values():
-        print(f"  [{location['id']}] {location['name']}")
+# --- Вспомогательные функции выбора и вывода ---
 
 
-def show_employees(employees: dict[int, dict]) -> None:
-    """Вывести список сотрудников."""
-    print("\n--- Сотрудники ---")
-    if not employees:
-        print("  Справочник пуст.")
-        return
-    for employee in employees.values():
-        position = employee["position"] or "должность не указана"
-        print(f"  [{employee['id']}] {employee['full_name']} ({position})")
+def format_prop(prop: dict, locations: dict[int, dict]) -> str:
+    """Строка предмета для списков выбора."""
+    location = locations.get(prop["location_id"])
+    location_name = location["name"] if location else "—"
+    return (
+        f"[{prop['inventory_number']}] {prop['name']} — "
+        f"{prop['status']} ({location_name})"
+    )
 
 
-def add_location_flow(locations: dict[int, dict]) -> None:
-    """Диалог добавления локации с проверкой дублей."""
-    name = input_nonempty("Название новой локации: ")
-    if find_location_by_name(locations, name) is not None:
-        print("Такая локация уже существует.")
-        return
-    location_id = add_location(locations, name)
-    save_locations(locations)
-    print(f"Локация «{name}» добавлена (ID {location_id}).")
+def format_employee(employee: dict) -> str:
+    """Строка сотрудника для списков выбора."""
+    position = employee["position"] or "должность не указана"
+    return f"{employee['full_name']} ({position})"
 
 
-def add_employee_flow(employees: dict[int, dict]) -> None:
-    """Диалог добавления сотрудника."""
-    full_name = input_nonempty("ФИО сотрудника: ")
-    position = input("Должность (Enter — не указывать): ").strip() or None
-    employee_id = add_employee(employees, full_name, position)
-    save_employees(employees)
-    print(f"Сотрудник {full_name} добавлен (ID {employee_id}).")
+def format_reservation(reservation: dict, props: dict[int, dict]) -> str:
+    """Строка бронирования для списков."""
+    prop = props.get(reservation["prop_id"])
+    prop_name = prop["name"] if prop else "—"
+    day = date.fromisoformat(reservation["date"])
+    return (
+        f"[{reservation['id']}] {day:%d.%m.%Y} — "
+        f"{prop_name} — {reservation['production']}"
+    )
+
+
+def choose_location(locations: dict[int, dict], title: str) -> dict | None:
+    """Выбрать локацию из справочника."""
+    return choose_from_list(
+        list(locations.values()),
+        title,
+        formatter=lambda item: item["name"],
+    )
+
+
+def choose_prop(
+    candidates: list[dict],
+    title: str,
+    locations: dict[int, dict],
+) -> dict | None:
+    """Выбрать предмет из списка кандидатов."""
+    return choose_from_list(
+        candidates,
+        title,
+        formatter=lambda item: format_prop(item, locations),
+    )
 
 # --- Каталог реквизита ---
 
@@ -154,11 +176,7 @@ def add_prop_flow(
     if condition is None:
         print("Добавление отменено.")
         return
-    location = choose_from_list(
-        list(locations.values()),
-        "Локация хранения:",
-        formatter=lambda item: item["name"],
-    )
+    location = choose_location(locations, "Локация хранения:")
     if location is None:
         print("Добавление отменено.")
         return
@@ -192,6 +210,296 @@ def find_props_flow(
     print_props_table(found, locations)
     print(f"Найдено: {len(found)} шт.")
 
+# --- Перемещения: выдача и возврат ---
+
+
+def issue_prop_flow(
+    props: dict[int, dict],
+    movements: list[dict],
+    locations: dict[int, dict],
+    employees: dict[int, dict],
+) -> None:
+    """Диалог выдачи реквизита."""
+    print("\n--- Выдача реквизита ---")
+    in_stock = filter_props(props, status=STATUS_IN_STOCK)
+    if not in_stock:
+        print("Нет предметов на складе.")
+        return
+    prop = choose_prop(in_stock, "Какой предмет выдать?", locations)
+    if prop is None:
+        print("Выдача отменена.")
+        return
+    employee = choose_from_list(
+        list(employees.values()),
+        "Ответственный (кому выдаём):",
+        formatter=format_employee,
+    )
+    if employee is None:
+        print("Выдача отменена.")
+        return
+    location = choose_location(locations, "Куда перемещаем:")
+    if location is None:
+        print("Выдача отменена.")
+        return
+    purpose = input_nonempty("Цель (репетиция / спектакль / прочее): ")
+    try:
+        issue_prop(
+            props,
+            movements,
+            prop["id"],
+            employee["id"],
+            location["id"],
+            purpose,
+        )
+    except ValueError as exc:
+        print(f"Ошибка: {exc}.")
+        return
+    save_props(props)
+    save_movements(movements)
+    print(
+        f"«{prop['name']}» выдан: {employee['full_name']}, "
+        f"локация «{location['name']}» ({purpose})."
+    )
+
+
+def return_prop_flow(
+    props: dict[int, dict],
+    movements: list[dict],
+    locations: dict[int, dict],
+) -> None:
+    """Диалог возврата реквизита."""
+    print("\n--- Возврат реквизита ---")
+    issued = filter_props(props, status=STATUS_ISSUED)
+    if not issued:
+        print("Нет выданных предметов.")
+        return
+    prop = choose_prop(issued, "Какой предмет возвращают?", locations)
+    if prop is None:
+        print("Возврат отменён.")
+        return
+    location = choose_location(locations, "Принять на локацию:")
+    if location is None:
+        print("Возврат отменён.")
+        return
+    condition = choose_from_list(
+        CONDITIONS,
+        "Зафиксируйте состояние предмета:",
+    )
+    if condition is None:
+        condition = prop["condition"]
+        print(f"Состояние оставлено без изменений: {condition}")
+    try:
+        return_prop(props, movements, prop["id"], location["id"], condition)
+    except ValueError as exc:
+        print(f"Ошибка: {exc}.")
+        return
+    save_props(props)
+    save_movements(movements)
+    print(f"«{prop['name']}» принят на «{location['name']}».")
+    if condition in ("изношено", "требует ремонта"):
+        print("Рекомендация: направить предмет на реставрацию.")
+
+
+def show_journal_flow(
+    movements: list[dict],
+    props: dict[int, dict],
+    locations: dict[int, dict],
+    employees: dict[int, dict],
+) -> None:
+    """Вывести последние перемещения реквизита."""
+    print("\n--- Журнал перемещений (последние 20) ---")
+    if not movements:
+        print("Журнал пуст.")
+        return
+    recent = movements[-20:]
+    for movement in reversed(recent):
+        prop = props.get(movement["prop_id"])
+        prop_label = f"[{prop['inventory_number']}] {prop['name']}"
+        location = locations.get(movement["location_id"])
+        location_name = location["name"] if location else "—"
+        employee = employees.get(movement["employee_id"])
+        employee_name = format_employee(employee) if employee else "—"
+        moved_at = datetime.fromisoformat(movement["moved_at"])
+        arrow = "→" if movement["movement_type"] == MOVEMENT_ISSUE else "←"
+        print(
+            f"{moved_at:%d.%m.%Y %H:%M} {arrow} {prop_label} | "
+            f"{location_name} | {employee_name} | {movement['purpose']}"
+        )
+
+# --- Бронирование ---
+
+
+def check_availability_flow(
+    props: dict[int, dict],
+    reservations: list[dict],
+    locations: dict[int, dict],
+) -> None:
+    """Диалог проверки доступности предмета на дату."""
+    print("\n--- Проверка доступности ---")
+    prop = choose_prop(
+        list(props.values()),
+        "Какой предмет проверить?",
+        locations,
+    )
+    if prop is None:
+        return
+    target_date = input_date("Дата: ")
+    available = is_prop_available(
+        props, reservations, prop["id"], target_date
+    )
+    print(get_reservation_status(available))
+    if not available:
+        conflict = find_reservation(reservations, prop["id"], target_date)
+        if conflict is not None:
+            print(
+                f"На эту дату предмет уже забронирован: "
+                f"{conflict['production']}."
+            )
+        else:
+            print(f"Предмет недоступен (статус: {prop['status']}).")
+
+
+def create_reservation_flow(
+    props: dict[int, dict],
+    reservations: list[dict],
+    locations: dict[int, dict],
+) -> None:
+    """Диалог бронирования предмета на дату."""
+    print("\n--- Бронирование предмета ---")
+    candidates = [
+        prop
+        for prop in props.values()
+        if prop["status"] not in BLOCKING_STATUSES
+    ]
+    if not candidates:
+        print("Нет предметов, доступных для бронирования.")
+        return
+    prop = choose_prop(
+        candidates,
+        "Какой предмет забронировать?",
+        locations,
+    )
+    if prop is None:
+        print("Бронирование отменено.")
+        return
+    target_date = input_date("Дата бронирования: ")
+    available = is_prop_available(
+        props, reservations, prop["id"], target_date
+    )
+    if not available:
+        conflict = find_reservation(reservations, prop["id"], target_date)
+        if conflict is not None:
+            print(
+                f"Предмет уже занят на {target_date:%d.%m.%Y} "
+                f"({conflict['production']})."
+            )
+        else:
+            print(f"Предмет недоступен (статус: {prop['status']}).")
+        return
+    production = input_nonempty("Постановка: ")
+    try:
+        reservation = create_reservation(
+            props,
+            reservations,
+            prop["id"],
+            target_date,
+            production,
+        )
+    except ValueError as exc:
+        print(f"Ошибка: {exc}.")
+        return
+    save_reservations(reservations)
+    print(
+        f"Предмет «{prop['name']}» забронирован на "
+        f"{target_date:%d.%m.%Y} для {production} "
+        f"(ID {reservation['id']})."
+    )
+
+
+def cancel_reservation_flow(
+    reservations: list[dict],
+    props: dict[int, dict],
+) -> None:
+    """Диалог отмены бронирования."""
+    print("\n--- Отмена бронирования ---")
+    if not reservations:
+        print("Бронирований нет.")
+        return
+    reservation = choose_from_list(
+        reservations,
+        "Какое бронирование отменить?",
+        formatter=lambda item: format_reservation(item, props),
+    )
+    if reservation is None:
+        print("Операция отменена.")
+        return
+    try:
+        cancelled = cancel_reservation(reservations, reservation["id"])
+    except ValueError as exc:
+        print(f"Ошибка: {exc}.")
+        return
+    save_reservations(reservations)
+    print(
+        f"Бронирование ID {cancelled['id']} "
+        f"({cancelled['production']}) отменено."
+    )
+
+
+def show_reservations_flow(
+    reservations: list[dict],
+    props: dict[int, dict],
+) -> None:
+    """Вывести список бронирований."""
+    print("\n--- Бронирования ---")
+    if not reservations:
+        print("Бронирований нет.")
+        return
+    ordered = sorted(reservations, key=lambda item: item["date"])
+    for reservation in ordered:
+        print(f"  {format_reservation(reservation, props)}")
+
+# --- Справочники: локации и сотрудники ---
+
+
+def show_locations(locations: dict[int, dict]) -> None:
+    """Вывести список локаций."""
+    print("\n--- Локации ---")
+    if not locations:
+        print("  Справочник пуст.")
+        return
+    for location in locations.values():
+        print(f"  [{location['id']}] {location['name']}")
+
+
+def show_employees(employees: dict[int, dict]) -> None:
+    """Вывести список сотрудников."""
+    print("\n--- Сотрудники ---")
+    if not employees:
+        print("  Справочник пуст.")
+        return
+    for employee in employees.values():
+        print(f"  [{employee['id']}] {format_employee(employee)}")
+
+
+def add_location_flow(locations: dict[int, dict]) -> None:
+    """Диалог добавления локации с проверкой дублей."""
+    name = input_nonempty("Название новой локации: ")
+    if find_location_by_name(locations, name) is not None:
+        print("Такая локация уже существует.")
+        return
+    location_id = add_location(locations, name)
+    save_locations(locations)
+    print(f"Локация «{name}» добавлена (ID {location_id}).")
+
+
+def add_employee_flow(employees: dict[int, dict]) -> None:
+    """Диалог добавления сотрудника."""
+    full_name = input_nonempty("ФИО сотрудника: ")
+    position = input("Должность (Enter — не указывать): ").strip() or None
+    employee_id = add_employee(employees, full_name, position)
+    save_employees(employees)
+    print(f"Сотрудник {full_name} добавлен (ID {employee_id}).")
+
 # --- Главное меню ---
 
 
@@ -216,21 +524,43 @@ def main() -> None:
         1: lambda: show_catalog_flow(props, locations),
         2: lambda: add_prop_flow(props, locations),
         3: lambda: find_props_flow(props, locations),
-        4: lambda: show_locations(locations),
-        5: lambda: add_location_flow(locations),
-        6: lambda: show_employees(employees),
-        7: lambda: add_employee_flow(employees),
+        4: lambda: issue_prop_flow(
+            props, movements, locations, employees
+        ),
+        5: lambda: return_prop_flow(props, movements, locations),
+        6: lambda: show_journal_flow(
+            movements, props, locations, employees
+        ),
+        7: lambda: check_availability_flow(props, reservations, locations),
+        8: lambda: create_reservation_flow(props, reservations, locations),
+        9: lambda: cancel_reservation_flow(reservations, props),
+        10: lambda: show_reservations_flow(reservations, props),
+        11: lambda: show_locations(locations),
+        12: lambda: add_location_flow(locations),
+        13: lambda: show_employees(employees),
+        14: lambda: add_employee_flow(employees),
     }
 
     while True:
         print("\n--- МЕНЮ ---")
-        print(" 1. Каталог реквизита (фильтры и сортировка)")
+        print("РЕКВИЗИТ")
+        print(" 1. Каталог (фильтры и сортировка)")
         print(" 2. Добавить предмет")
         print(" 3. Найти предмет")
-        print(" 4. Локации: список")
-        print(" 5. Локации: добавить")
-        print(" 6. Сотрудники: список")
-        print(" 7. Сотрудники: добавить")
+        print("ПЕРЕМЕЩЕНИЯ")
+        print(" 4. Выдать реквизит")
+        print(" 5. Принять возврат")
+        print(" 6. Журнал перемещений")
+        print("БРОНИРОВАНИЕ")
+        print(" 7. Проверить доступность на дату")
+        print(" 8. Забронировать предмет")
+        print(" 9. Отменить бронирование")
+        print("10. Список бронирований")
+        print("СПРАВОЧНИКИ")
+        print("11. Локации: список")
+        print("12. Локации: добавить")
+        print("13. Сотрудники: список")
+        print("14. Сотрудники: добавить")
         print(" 0. Выход")
         choice = input_int("Ваш выбор: ")
         if choice == 0:
