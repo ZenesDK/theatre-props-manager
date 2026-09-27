@@ -31,15 +31,36 @@ def input_int(prompt: str) -> int:
             print("  Введите целое число.")
 
 
+def _parse_date(raw: str) -> date:
+    """Разобрать строку формата ДД.ММ.ГГГГ в объект date.
+
+    Raises:
+        ValueError: если строка не является корректной датой.
+    """
+    day, month, year = (int(part) for part in raw.split("."))
+    return date(year, month, day)
+
+
 def input_date(prompt: str) -> date:
     """Запросить дату в формате ДД.ММ.ГГГГ и вернуть объект date."""
     while True:
         raw = input(prompt).strip()
         try:
-            day, month, year = (int(part) for part in raw.split("."))
-            return date(year, month, day)
+            return _parse_date(raw)
         except ValueError:
             print("  Введите дату в формате ДД.ММ.ГГГГ, например 05.11.2026.")
+
+
+def input_optional_date(prompt: str) -> date | None:
+    """Запросить дату; пустой ввод означает «не указана»."""
+    while True:
+        raw = input(prompt).strip()
+        if not raw:
+            return None
+        try:
+            return _parse_date(raw)
+        except ValueError:
+            print("  Введите дату в формате ДД.ММ.ГГГГ или пустую строку.")
 
 
 def input_yes_no(prompt: str) -> bool:

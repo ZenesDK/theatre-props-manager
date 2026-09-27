@@ -1,8 +1,8 @@
 """Бронирование реквизита на даты постановок.
 
 Запись бронирования — словарь с полями id, prop_id, date
-(ISO-строка ГГГГ-ММ-ДД), production, reserved_at. Бронирования
-представлены списком записей.
+(ISO-строка ГГГГ-ММ-ДД), production_id, reserved_at.
+Бронирования представлены списком записей.
 """
 
 from datetime import date, datetime
@@ -54,7 +54,7 @@ def create_reservation(
     reservations: list[dict],
     prop_id: int,
     target_date: date,
-    production: str,
+    production_id: int,
 ) -> dict:
     """Создать бронирование и вернуть его запись.
 
@@ -67,7 +67,7 @@ def create_reservation(
         "id": next_id(reservations),
         "prop_id": prop_id,
         "date": target_date.isoformat(),
-        "production": production,
+        "production_id": production_id,
         "reserved_at": datetime.now().isoformat(timespec="seconds"),
     }
     reservations.append(reservation)

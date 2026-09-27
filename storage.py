@@ -69,6 +69,16 @@ def save_employees(employees: dict[int, dict]) -> None:
     _save_items("employees.json", _to_list(employees))
 
 
+def load_productions() -> dict[int, dict]:
+    """Загрузить справочник постановок."""
+    return _to_map(_load_items("productions.json"))
+
+
+def save_productions(productions: dict[int, dict]) -> None:
+    """Сохранить справочник постановок."""
+    _save_items("productions.json", _to_list(productions))
+
+
 def load_props() -> dict[int, dict]:
     """Загрузить каталог предметов реквизита."""
     return _to_map(_load_items("props.json"))
