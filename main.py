@@ -15,22 +15,18 @@ from inventory import (
     select_props_for_check,
     split_by_answers,
 )
-from models.employees import Employee, add_employee
-from models.locations import (
+from models import (
+    Employee,
     Location,
-    add_location,
-    find_location_by_name,
-)
-from models.movements import (
     Movement,
-    issue_prop,
-    return_prop,
-)
-from models.productions import (
     Production,
-    add_production,
-    find_production_by_title,
+    Prop,
+    Reservation,
 )
+from models.employees import add_employee
+from models.locations import add_location, find_location_by_name
+from models.movements import issue_prop, return_prop
+from models.productions import add_production, find_production_by_title
 from models.props import (
     CATEGORIES,
     CONDITIONS,
@@ -38,14 +34,13 @@ from models.props import (
     STATUSES,
     STATUS_IN_STOCK,
     STATUS_ISSUED,
-    Prop,
     add_prop,
     filter_props,
     find_prop_by_inventory_number,
     find_props,
     sort_props,
 )
-from reservations import (
+from models.reservations import (
     cancel_reservation,
     create_reservation,
     find_reservation,
@@ -69,7 +64,6 @@ from storage import (
 )
 from utils import (
     choose_from_list,
-    find_by_id,
     input_date,
     input_int,
     input_nonempty,
@@ -273,26 +267,9 @@ def show_journal_flow(movements: list[Movement]) -> None:
 # --- Бронирование ---
 
 
-def format_reservation(
-    reservation: dict,
-    props: list[Prop],
-    productions: list[Production],
-) -> str:
-    """Строка бронирования для списков."""
-    prop = find_by_id(props, reservation["prop_id"])
-    prop_name = prop.name if prop else "—"
-    production = find_by_id(productions, reservation["production_id"])
-    production_title = production.title if production else "—"
-    return (
-        f"[{reservation['id']}] {reservation['date']} — "
-        f"{prop_name} — {production_title}"
-    )
-
-
 def check_availability_flow(
     props: list[Prop],
-    reservations: list[dict],
-    productions: list[Production],
+    reservations: list[Reservation],
 ) -> None:
     """Диалог проверки доступности предмета на дату."""
     print("\n--- Проверка доступности ---")
@@ -311,14 +288,15 @@ def check_availability_flow(
     if conflict is None:
         print("Причина недоступности не определена.")
         return
-    production = find_by_id(productions, conflict["production_id"])
-    production_title = production.title if production else "—"
-    print(f"На эту дату предмет уже забронирован: {production_title}.")
+    print(
+        f"На эту дату предмет уже забронирован: "
+        f"{conflict.production.title}."
+    )
 
 
 def create_reservation_flow(
     props: list[Prop],
-    reservations: list[dict],
+    reservations: list[Reservation],
     productions: list[Production],
 ) -> None:
     """Диалог бронирования предмета на дату."""
@@ -335,13 +313,9 @@ def create_reservation_flow(
     if not is_prop_available(prop, reservations, target_date):
         conflict = find_reservation(reservations, prop, target_date)
         if conflict is not None:
-            production = find_by_id(
-                productions, conflict["production_id"]
-            )
-            title = production.title if production else "—"
             print(
                 f"Предмет уже занят на {target_date:%d.%m.%Y} "
-                f"({title})."
+                f"({conflict.production.title})."
             )
         else:
             print(f"Предмет недоступен (статус: {prop.status}).")
@@ -367,29 +341,21 @@ def create_reservation_flow(
     else:
         print("Нет такого пункта.")
         return
-    try:
-        reservation = create_reservation(
-            reservations,
-            prop,
-            target_date,
-            production.id,
-        )
-    except ValueError as exc:
-        print(f"Ошибка: {exc}.")
+    reservation = create_reservation(
+        reservations, prop, target_date, production
+    )
+    if reservation is None:
+        print("Ошибка: предмет недоступен на выбранную дату.")
         return
     save_reservations(reservations)
     print(
         f"Предмет «{prop.name}» забронирован на "
         f"{target_date:%d.%m.%Y} для {production.title} "
-        f"(ID {reservation['id']})."
+        f"(ID {reservation.id})."
     )
 
 
-def cancel_reservation_flow(
-    reservations: list[dict],
-    props: list[Prop],
-    productions: list[Production],
-) -> None:
+def cancel_reservation_flow(reservations: list[Reservation]) -> None:
     """Диалог отмены бронирования."""
     print("\n--- Отмена бронирования ---")
     if not reservations:
@@ -398,41 +364,29 @@ def cancel_reservation_flow(
     reservation = choose_from_list(
         reservations,
         "Какое бронирование отменить?",
-        formatter=lambda item: format_reservation(
-            item, props, productions
-        ),
     )
     if reservation is None:
         print("Операция отменена.")
         return
-    try:
-        cancelled = cancel_reservation(reservations, reservation["id"])
-    except ValueError as exc:
-        print(f"Ошибка: {exc}.")
+    if reservation.is_cancelled:
+        print("Это бронирование уже отменено.")
+        return
+    if not cancel_reservation(reservations, reservation.id):
+        print("Бронирование не найдено.")
         return
     save_reservations(reservations)
-    production = find_by_id(productions, cancelled["production_id"])
-    production_title = production.title if production else "—"
-    print(
-        f"Бронирование ID {cancelled['id']} "
-        f"({production_title}) отменено."
-    )
+    print(f"Бронирование ID {reservation.id} отменено.")
 
 
-def show_reservations_flow(
-    reservations: list[dict],
-    props: list[Prop],
-    productions: list[Production],
-) -> None:
+def show_reservations_flow(reservations: list[Reservation]) -> None:
     """Вывести список бронирований."""
     print("\n--- Бронирования ---")
     if not reservations:
         print("Бронирований нет.")
         return
-    ordered = sorted(reservations, key=lambda item: item["date"])
+    ordered = sorted(reservations, key=lambda item: item.date)
     for reservation in ordered:
-        line = format_reservation(reservation, props, productions)
-        print(f"  {line}")
+        print(f"  {reservation}")
 
 # --- Постановки ---
 
@@ -587,7 +541,7 @@ def main() -> None:
     productions = load_productions()
     props = load_props(locations)
     movements = load_movements(props, locations, employees)
-    reservations = load_reservations()
+    reservations = load_reservations(props, productions)
 
     print("=== THEATER PROPS — учёт театрального реквизита ===")
     print(
@@ -608,18 +562,12 @@ def main() -> None:
         ),
         5: lambda: return_prop_flow(props, movements, locations),
         6: lambda: show_journal_flow(movements),
-        7: lambda: check_availability_flow(
-            props, reservations, productions
-        ),
+        7: lambda: check_availability_flow(props, reservations),
         8: lambda: create_reservation_flow(
             props, reservations, productions
         ),
-        9: lambda: cancel_reservation_flow(
-            reservations, props, productions
-        ),
-        10: lambda: show_reservations_flow(
-            reservations, props, productions
-        ),
+        9: lambda: cancel_reservation_flow(reservations),
+        10: lambda: show_reservations_flow(reservations),
         11: lambda: show_productions_flow(productions),
         12: lambda: add_production_flow(productions),
         13: lambda: run_inventory_flow(props, locations),

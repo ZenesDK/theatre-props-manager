@@ -4,13 +4,31 @@
     "prop_id": 1,
     "date": "2026-10-05",
     "production_id": 1,
-    "reserved_at": "2026-09-10T11:00:00"
+    "reserved_at": "2026-09-10T11:00:00",
+    "is_cancelled": false
   },
   {
     "id": 2,
     "prop_id": 2,
     "date": "2026-10-07",
     "production_id": 2,
-    "reserved_at": "2026-09-12T16:20:00"
+    "reserved_at": "2026-09-12T16:20:00",
+    "is_cancelled": false
+  },
+  {
+    "id": 3,
+    "prop_id": 2,
+    "date": "2026-10-09",
+    "production_id": 3,
+    "reserved_at": "2026-09-01T09:30:00",
+    "is_cancelled": true
+  },
+  {
+    "id": 4,
+    "prop_id": 2,
+    "date": "2026-10-09",
+    "production_id": 3,
+    "reserved_at": "2026-09-27T21:18:05",
+    "is_cancelled": true
   }
 ]

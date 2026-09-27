@@ -6,11 +6,10 @@
 (первый запуск). Повреждённый JSON прерывает запуск программы
 с понятным сообщением вместо аварийной трассировки.
 
-Локации, сотрудники, постановки, предметы и перемещения —
-объекты классов пакета models: при загрузке записи JSON
-превращаются в объекты (с восстановлением ссылок между ними),
-при сохранении выполняется обратное преобразование.
-Бронирования на этом этапе остаются словарями.
+Все сущности предметной области — объекты классов пакета
+models: при загрузке записи JSON превращаются в объекты
+(с восстановлением ссылок между ними), при сохранении
+выполняется обратное преобразование.
 """
 
 import json
@@ -22,6 +21,7 @@ from models.locations import Location
 from models.movements import Movement
 from models.productions import Production
 from models.props import Prop
+from models.reservations import Reservation
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
@@ -128,11 +128,21 @@ def save_movements(movements: list[Movement]) -> None:
     )
 
 
-def load_reservations() -> list[dict]:
+def load_reservations(
+    props: list[Prop],
+    productions: list[Production],
+) -> list[Reservation]:
     """Загрузить список бронирований."""
-    return _load_items("reservations.json")
+    items = _load_items("reservations.json")
+    return [
+        Reservation.from_data(item, props, productions)
+        for item in items
+    ]
 
 
-def save_reservations(reservations: list[dict]) -> None:
+def save_reservations(reservations: list[Reservation]) -> None:
     """Сохранить список бронирований."""
-    _save_items("reservations.json", reservations)
+    _save_items(
+        "reservations.json",
+        [reservation.to_data() for reservation in reservations],
+    )

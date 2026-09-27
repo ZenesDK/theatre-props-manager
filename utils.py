@@ -127,16 +127,10 @@ def find_by_id(
     return None
 
 
-def next_id(collection: dict | list) -> int:
+def next_id(items: list) -> int:
     """Вернуть следующий свободный идентификатор коллекции.
 
-    Переходный этап ПР3: поддерживает словарь вида {id: dict},
-    список словарей с полем id и список объектов с атрибутом id.
+    Подходит для списков объектов с атрибутом id.
     Для пустой коллекции возвращается 1.
     """
-    if isinstance(collection, dict):
-        return max(collection, default=0) + 1
-    ids = []
-    for item in collection:
-        ids.append(item.id if hasattr(item, "id") else item["id"])
-    return max(ids, default=0) + 1
+    return max((item.id for item in items), default=0) + 1
