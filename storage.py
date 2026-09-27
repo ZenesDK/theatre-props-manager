@@ -6,10 +6,11 @@
 (первый запуск). Повреждённый JSON прерывает запуск программы
 с понятным сообщением вместо аварийной трассировки.
 
-Локации, сотрудники и постановки — объекты классов пакета
-models: при загрузке записи JSON превращаются в объекты,
-при сохранении выполняется обратное преобразование. Предметы,
-перемещения и бронирования на этом этапе остаются словарями.
+Локации, сотрудники, постановки, предметы и перемещения —
+объекты классов пакета models: при загрузке записи JSON
+превращаются в объекты (с восстановлением ссылок между ними),
+при сохранении выполняется обратное преобразование.
+Бронирования на этом этапе остаются словарями.
 """
 
 import json
@@ -18,7 +19,9 @@ from pathlib import Path
 
 from models.employees import Employee
 from models.locations import Location
+from models.movements import Movement
 from models.productions import Production
+from models.props import Prop
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
@@ -46,16 +49,6 @@ def _save_items(filename: str, items: list[dict]) -> None:
             json.dump(items, file, ensure_ascii=False, indent=2)
     except OSError as exc:
         print(f"Не удалось сохранить данные в {path}: {exc}")
-
-
-def _to_map(items: list[dict]) -> dict[int, dict]:
-    """Преобразовать список записей в словарь с ключом id."""
-    return {item["id"]: item for item in items}
-
-
-def _to_list(mapping: dict[int, dict]) -> list[dict]:
-    """Преобразовать словарь записей в список, упорядоченный по id."""
-    return [mapping[key] for key in sorted(mapping)]
 
 
 def load_locations() -> list[Location]:
@@ -100,24 +93,39 @@ def save_productions(productions: list[Production]) -> None:
     )
 
 
-def load_props() -> dict[int, dict]:
+def load_props(locations: list[Location]) -> list[Prop]:
     """Загрузить каталог предметов реквизита."""
-    return _to_map(_load_items("props.json"))
+    items = _load_items("props.json")
+    return [Prop.from_data(item, locations) for item in items]
 
 
-def save_props(props: dict[int, dict]) -> None:
+def save_props(props: list[Prop]) -> None:
     """Сохранить каталог предметов реквизита."""
-    _save_items("props.json", _to_list(props))
+    _save_items(
+        "props.json",
+        [prop.to_data() for prop in props],
+    )
 
 
-def load_movements() -> list[dict]:
+def load_movements(
+    props: list[Prop],
+    locations: list[Location],
+    employees: list[Employee],
+) -> list[Movement]:
     """Загрузить журнал перемещений."""
-    return _load_items("movements.json")
+    items = _load_items("movements.json")
+    return [
+        Movement.from_data(item, props, locations, employees)
+        for item in items
+    ]
 
 
-def save_movements(movements: list[dict]) -> None:
+def save_movements(movements: list[Movement]) -> None:
     """Сохранить журнал перемещений."""
-    _save_items("movements.json", movements)
+    _save_items(
+        "movements.json",
+        [movement.to_data() for movement in movements],
+    )
 
 
 def load_reservations() -> list[dict]:

@@ -5,8 +5,7 @@
 и локациям, количество предметов, требующих ремонта.
 """
 
-from models.locations import Location
-from utils import find_by_id
+from models.props import Prop
 
 
 def count_values(values: list[str]) -> dict[str, int]:
@@ -17,37 +16,26 @@ def count_values(values: list[str]) -> dict[str, int]:
     return counts
 
 
-def _location_name(prop: dict, locations: list[Location]) -> str:
-    """Вернуть имя локации предмета или прочерк."""
-    location = find_by_id(locations, prop["location_id"])
-    return location.name if location else "—"
-
-
-def get_stats(
-    props: dict[int, dict],
-    locations: list[Location],
-) -> dict:
+def get_stats(props: list[Prop]) -> dict:
     """Собрать сводную статистику по каталогу реквизита.
 
     Возвращает словарь: total — всего предметов, needs_repair —
     требующих ремонта, by_status, by_category, by_location —
     распределения количества предметов по значениям.
     """
-    prop_values = list(props.values())
     return {
-        "total": len(prop_values),
-        "needs_repair": sum(
-            1
-            for prop in prop_values
-            if prop["condition"] == "требует ремонта"
-        ),
+        "total": len(props),
+        "needs_repair": sum(1 for prop in props if prop.needs_repair()),
         "by_status": count_values(
-            [prop["status"] for prop in prop_values]
+            [prop.status for prop in props]
         ),
         "by_category": count_values(
-            [prop["category"] or "—" for prop in prop_values]
+            [prop.category or "—" for prop in props]
         ),
         "by_location": count_values(
-            [_location_name(prop, locations) for prop in prop_values]
+            [
+                prop.location.name if prop.location else "—"
+                for prop in props
+            ]
         ),
     }

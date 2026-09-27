@@ -1,50 +1,48 @@
 """Тесты функций статистики."""
 
+from datetime import datetime
+
 from models.locations import Location
+from models.props import Prop
 from stats import count_values, get_stats
 
+WAREHOUSE = Location(1, "Склад №1")
+SCENE = Location(2, "Малая сцена")
 
-def make_props() -> dict[int, dict]:
+
+def make_props() -> list[Prop]:
     """Каталог из трёх предметов в двух локациях."""
-    return {
-        1: {
-            "id": 1,
-            "inventory_number": "ТР-0001",
-            "name": "Канделябр бронзовый",
-            "category": "мебель",
-            "condition": "хорошее",
-            "status": "на складе",
-            "location_id": 1,
-            "created_at": "2026-09-01T10:00:00",
-        },
-        2: {
-            "id": 2,
-            "inventory_number": "ТР-0002",
-            "name": "Кубок золотой",
-            "category": "посуда",
-            "condition": "требует ремонта",
-            "status": "выдан",
-            "location_id": 2,
-            "created_at": "2026-09-01T10:00:00",
-        },
-        3: {
-            "id": 3,
-            "inventory_number": "ТР-0003",
-            "name": "Шпага дворянская",
-            "category": "мебель",
-            "condition": "изношено",
-            "status": "на складе",
-            "location_id": 1,
-            "created_at": "2026-09-01T10:00:00",
-        },
-    }
-
-
-def make_locations() -> list[Location]:
-    """Справочник из двух локаций."""
     return [
-        Location(1, "Склад №1"),
-        Location(2, "Малая сцена"),
+        Prop(
+            prop_id=1,
+            inventory_number="ТР-0001",
+            name="Канделябр бронзовый",
+            category="мебель",
+            condition="хорошее",
+            location=WAREHOUSE,
+            created_at=datetime(2026, 9, 1, 10, 0, 0),
+            status="на складе",
+        ),
+        Prop(
+            prop_id=2,
+            inventory_number="ТР-0002",
+            name="Кубок золотой",
+            category="посуда",
+            condition="требует ремонта",
+            location=SCENE,
+            created_at=datetime(2026, 9, 1, 10, 0, 0),
+            status="выдан",
+        ),
+        Prop(
+            prop_id=3,
+            inventory_number="ТР-0003",
+            name="Шпага дворянская",
+            category="мебель",
+            condition="изношено",
+            location=WAREHOUSE,
+            created_at=datetime(2026, 9, 1, 10, 0, 0),
+            status="на складе",
+        ),
     ]
 
 
@@ -61,32 +59,36 @@ def test_count_values_empty():
 
 
 def test_get_stats_total():
-    stats = get_stats(make_props(), make_locations())
+    stats = get_stats(make_props())
     assert stats["total"] == 3
 
 
 def test_get_stats_by_status():
-    stats = get_stats(make_props(), make_locations())
+    stats = get_stats(make_props())
     assert stats["by_status"] == {"на складе": 2, "выдан": 1}
 
 
 def test_get_stats_by_category():
-    stats = get_stats(make_props(), make_locations())
+    stats = get_stats(make_props())
     assert stats["by_category"] == {"мебель": 2, "посуда": 1}
 
 
 def test_get_stats_by_location():
-    stats = get_stats(make_props(), make_locations())
+    stats = get_stats(make_props())
     assert stats["by_location"] == {"Склад №1": 2, "Малая сцена": 1}
 
 
 def test_get_stats_needs_repair():
-    stats = get_stats(make_props(), make_locations())
+    stats = get_stats(make_props())
     assert stats["needs_repair"] == 1
 
 
 def test_get_stats_unknown_location():
     props = make_props()
-    props[3]["location_id"] = 99
-    stats = get_stats(props, make_locations())
-    assert stats["by_location"] == {"Склад №1": 1, "Малая сцена": 1, "—": 1}
+    props[2].location = Location(99, "Нигде")
+    stats = get_stats(props)
+    assert stats["by_location"] == {
+        "Склад №1": 1,
+        "Малая сцена": 1,
+        "Нигде": 1,
+    }

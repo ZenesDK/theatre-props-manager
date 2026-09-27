@@ -2,20 +2,19 @@
 
 Запись бронирования — словарь с полями id, prop_id, date
 (ISO-строка ГГГГ-ММ-ДД), production_id, reserved_at.
-Бронирования представлены списком записей.
+Бронирования представлены списком записей. На следующем
+этапе записи станут объектами класса Reservation.
 """
 
 from datetime import date, datetime
 
-from props import STATUS_LOST, STATUS_WRITTEN_OFF
+from models.props import Prop
 from utils import next_id
-
-BLOCKING_STATUSES = (STATUS_LOST, STATUS_WRITTEN_OFF)
 
 
 def find_reservation(
     reservations: list[dict],
-    prop_id: int,
+    prop: Prop,
     target_date: date,
 ) -> dict | None:
     """Найти бронирование предмета на указанную дату.
@@ -24,7 +23,7 @@ def find_reservation(
     """
     date_iso = target_date.isoformat()
     for reservation in reservations:
-        same_prop = reservation["prop_id"] == prop_id
+        same_prop = reservation["prop_id"] == prop.id
         same_date = reservation["date"] == date_iso
         if same_prop and same_date:
             return reservation
@@ -32,27 +31,23 @@ def find_reservation(
 
 
 def is_prop_available(
-    props: dict[int, dict],
+    prop: Prop,
     reservations: list[dict],
-    prop_id: int,
     target_date: date,
 ) -> bool:
     """Проверить, свободен ли предмет на указанную дату.
 
-    Предмет недоступен, если он не найден, находится в состоянии
-    «утерян» или «списан», либо если на эту дату уже есть
-    бронирование.
+    Предмет недоступен, если он списан или утерян,
+    либо если на эту дату уже есть бронирование.
     """
-    prop = props.get(prop_id)
-    if prop is None or prop["status"] in BLOCKING_STATUSES:
+    if not prop.is_bookable():
         return False
-    return find_reservation(reservations, prop_id, target_date) is None
+    return find_reservation(reservations, prop, target_date) is None
 
 
 def create_reservation(
-    props: dict[int, dict],
     reservations: list[dict],
-    prop_id: int,
+    prop: Prop,
     target_date: date,
     production_id: int,
 ) -> dict:
@@ -61,11 +56,11 @@ def create_reservation(
     Raises:
         ValueError: если предмет недоступен на указанную дату.
     """
-    if not is_prop_available(props, reservations, prop_id, target_date):
+    if not is_prop_available(prop, reservations, target_date):
         raise ValueError("Предмет недоступен на выбранную дату")
     reservation = {
         "id": next_id(reservations),
-        "prop_id": prop_id,
+        "prop_id": prop.id,
         "date": target_date.isoformat(),
         "production_id": production_id,
         "reserved_at": datetime.now().isoformat(timespec="seconds"),

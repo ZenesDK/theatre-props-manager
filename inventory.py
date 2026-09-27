@@ -9,33 +9,34 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from props import STATUS_LOST, STATUS_WRITTEN_OFF
+from models.locations import Location
+from models.props import STATUS_LOST, STATUS_WRITTEN_OFF, Prop
 
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 
 
 def select_props_for_check(
-    props: dict[int, dict],
-    location_id: int,
-) -> list[dict]:
+    props: list[Prop],
+    location: Location,
+) -> list[Prop]:
     """Отобрать предметы локации для сверки.
 
     Списанные предметы в сверке не участвуют: они выведены
     из эксплуатации и учитываются только в отчётах.
     """
     selected = []
-    for prop in props.values():
-        at_location = prop["location_id"] == location_id
-        not_written_off = prop["status"] != STATUS_WRITTEN_OFF
+    for prop in props:
+        at_location = prop.location is location
+        not_written_off = prop.status != STATUS_WRITTEN_OFF
         if at_location and not_written_off:
             selected.append(prop)
     return selected
 
 
 def split_by_answers(
-    props: list[dict],
+    props: list[Prop],
     answers: dict[int, bool],
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[Prop], list[Prop]]:
     """Разделить предметы сверки на найденные и ненайденные.
 
     answers сопоставляет идентификатору предмета ответ:
@@ -45,25 +46,25 @@ def split_by_answers(
     found = []
     missing = []
     for prop in props:
-        if answers.get(prop["id"], False):
+        if answers.get(prop.id, False):
             found.append(prop)
         else:
             missing.append(prop)
     return found, missing
 
 
-def _brief(prop: dict) -> dict:
+def _brief(prop: Prop) -> dict:
     """Краткая запись предмета для отчёта."""
     return {
-        "inventory_number": prop["inventory_number"],
-        "name": prop["name"],
+        "inventory_number": prop.inventory_number,
+        "name": prop.name,
     }
 
 
 def build_report(
     location_name: str,
-    found: list[dict],
-    missing: list[dict],
+    found: list[Prop],
+    missing: list[Prop],
 ) -> dict:
     """Собрать отчёт инвентаризации по результатам сверки.
 
@@ -79,7 +80,7 @@ def build_report(
     }
 
 
-def mark_missing_lost(props: dict[int, dict], missing: list[dict]) -> int:
+def mark_missing_lost(missing: list[Prop]) -> int:
     """Пометить ненайденные предметы как утерянные.
 
     Возвращает количество предметов, сменивших статус:
@@ -87,9 +88,8 @@ def mark_missing_lost(props: dict[int, dict], missing: list[dict]) -> int:
     """
     updated = 0
     for prop in missing:
-        target = props[prop["id"]]
-        if target["status"] != STATUS_LOST:
-            target["status"] = STATUS_LOST
+        if prop.status != STATUS_LOST:
+            prop.mark_lost()
             updated += 1
     return updated
 

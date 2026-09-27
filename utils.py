@@ -6,7 +6,16 @@
 """
 
 from datetime import date
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, TypeVar
+
+
+class Identified(Protocol):
+    """Объект с целочисленным идентификатором."""
+
+    id: int
+
+
+IdentifiedT = TypeVar("IdentifiedT", bound=Identified)
 
 
 def input_nonempty(prompt: str) -> str:
@@ -101,10 +110,15 @@ def choose_from_list(
     return None
 
 
-def find_by_id(items: list, item_id: int | None) -> object | None:
+def find_by_id(
+    items: list[IdentifiedT],
+    item_id: int | None,
+) -> IdentifiedT | None:
     """Найти элемент коллекции по идентификатору.
 
-    Подходит для списков объектов с атрибутом id. Возвращает
+    Подходит для списков объектов с атрибутом id. Тип
+    возвращаемого значения выводится из типа коллекции:
+    find_by_id(props, ...) вернёт Prop | None. Возвращает
     None, если элемент не найден (в том числе при item_id=None).
     """
     for item in items:

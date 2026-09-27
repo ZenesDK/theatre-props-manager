@@ -5,7 +5,7 @@
 Запуск: python main.py
 """
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Callable
 
 from inventory import (
@@ -21,19 +21,24 @@ from models.locations import (
     add_location,
     find_location_by_name,
 )
+from models.movements import (
+    Movement,
+    issue_prop,
+    return_prop,
+)
 from models.productions import (
     Production,
     add_production,
     find_production_by_title,
 )
-from movements import MOVEMENT_ISSUE, issue_prop, return_prop
-from props import (
+from models.props import (
     CATEGORIES,
     CONDITIONS,
     SORT_OPTIONS,
     STATUSES,
     STATUS_IN_STOCK,
     STATUS_ISSUED,
+    Prop,
     add_prop,
     filter_props,
     find_prop_by_inventory_number,
@@ -41,7 +46,6 @@ from props import (
     sort_props,
 )
 from reservations import (
-    BLOCKING_STATUSES,
     cancel_reservation,
     create_reservation,
     find_reservation,
@@ -73,60 +77,10 @@ from utils import (
     input_yes_no,
 )
 
-# --- Вспомогательные функции выбора и вывода ---
-
-
-def format_prop(prop: dict, locations: list[Location]) -> str:
-    """Строка предмета для списков выбора."""
-    location = find_by_id(locations, prop["location_id"])
-    location_name = location.name if location else "—"
-    return (
-        f"[{prop['inventory_number']}] {prop['name']} — "
-        f"{prop['status']} ({location_name})"
-    )
-
-
-def format_reservation(
-    reservation: dict,
-    props: dict[int, dict],
-    productions: list[Production],
-) -> str:
-    """Строка бронирования для списков."""
-    prop = props.get(reservation["prop_id"])
-    prop_name = prop["name"] if prop else "—"
-    production = find_by_id(productions, reservation["production_id"])
-    production_title = production.title if production else "—"
-    day = date.fromisoformat(reservation["date"])
-    return (
-        f"[{reservation['id']}] {day:%d.%m.%Y} — "
-        f"{prop_name} — {production_title}"
-    )
-
-
-def choose_location(locations: list[Location], title: str) -> Location | None:
-    """Выбрать локацию из справочника."""
-    return choose_from_list(locations, title)
-
-
-def choose_prop(
-    candidates: list[dict],
-    title: str,
-    locations: list[Location],
-) -> dict | None:
-    """Выбрать предмет из списка кандидатов."""
-    return choose_from_list(
-        candidates,
-        title,
-        formatter=lambda item: format_prop(item, locations),
-    )
-
 # --- Каталог реквизита ---
 
 
-def print_props_table(
-    props: list[dict],
-    locations: list[Location],
-) -> None:
+def print_props_table(props: list[Prop]) -> None:
     """Вывести предметы реквизита в виде таблицы."""
     print(
         f"{'ID':<4}{'Инв.№':<9}{'Название':<26}"
@@ -134,23 +88,19 @@ def print_props_table(
     )
     print("-" * 100)
     for prop in props:
-        location = find_by_id(locations, prop["location_id"])
-        location_name = location.name if location else "—"
+        location_name = prop.location.name if prop.location else "—"
         print(
-            f"{prop['id']:<4}"
-            f"{prop['inventory_number']:<9}"
-            f"{prop['name'][:25]:<26}"
-            f"{prop['category'][:19]:<20}"
-            f"{prop['condition'][:15]:<16}"
-            f"{prop['status'][:11]:<12}"
+            f"{prop.id:<4}"
+            f"{prop.inventory_number:<9}"
+            f"{prop.name[:25]:<26}"
+            f"{prop.category[:19]:<20}"
+            f"{prop.condition[:15]:<16}"
+            f"{prop.status[:11]:<12}"
             f"{location_name}"
         )
 
 
-def show_catalog_flow(
-    props: dict[int, dict],
-    locations: list[Location],
-) -> None:
+def show_catalog_flow(props: list[Prop]) -> None:
     """Диалог просмотра каталога: фильтр, сортировка, таблица."""
     print("\n--- Каталог реквизита ---")
     print("Фильтр: 1 — по категории, 2 — по статусу, 0 — без фильтра")
@@ -173,14 +123,11 @@ def show_catalog_flow(
     if sort_key is None:
         return
     ordered = sort_props(selected, sort_key)
-    print_props_table(ordered, locations)
+    print_props_table(ordered)
     print(f"Итого: {len(ordered)} шт.")
 
 
-def add_prop_flow(
-    props: dict[int, dict],
-    locations: list[Location],
-) -> None:
+def add_prop_flow(props: list[Prop], locations: list[Location]) -> None:
     """Диалог добавления предмета реквизита.
 
     Инвентарный номер проверяется на уникальность сразу после
@@ -200,30 +147,27 @@ def add_prop_flow(
     if condition is None:
         print("Добавление отменено.")
         return
-    location = choose_location(locations, "Локация хранения:")
+    location = choose_from_list(locations, "Локация хранения:")
     if location is None:
         print("Добавление отменено.")
         return
     try:
-        prop_id = add_prop(
+        prop = add_prop(
             props,
             inventory_number,
             name,
             category,
             condition,
-            location.id,
+            location,
         )
     except ValueError as exc:
         print(f"Ошибка: {exc}.")
         return
     save_props(props)
-    print(f"Предмет «{name}» добавлен (ID {prop_id}).")
+    print(f"Предмет «{name}» добавлен (ID {prop.id}).")
 
 
-def find_props_flow(
-    props: dict[int, dict],
-    locations: list[Location],
-) -> None:
+def find_props_flow(props: list[Prop]) -> None:
     """Диалог поиска предметов по подстроке."""
     print("\n--- Поиск реквизита ---")
     query = input_nonempty("Строка поиска (название или инв. №): ")
@@ -231,15 +175,15 @@ def find_props_flow(
     if not found:
         print("Ничего не найдено.")
         return
-    print_props_table(found, locations)
+    print_props_table(found)
     print(f"Найдено: {len(found)} шт.")
 
 # --- Перемещения: выдача и возврат ---
 
 
 def issue_prop_flow(
-    props: dict[int, dict],
-    movements: list[dict],
+    props: list[Prop],
+    movements: list[Movement],
     locations: list[Location],
     employees: list[Employee],
 ) -> None:
@@ -249,7 +193,7 @@ def issue_prop_flow(
     if not in_stock:
         print("Нет предметов на складе.")
         return
-    prop = choose_prop(in_stock, "Какой предмет выдать?", locations)
+    prop = choose_from_list(in_stock, "Какой предмет выдать?")
     if prop is None:
         print("Выдача отменена.")
         return
@@ -260,34 +204,27 @@ def issue_prop_flow(
     if employee is None:
         print("Выдача отменена.")
         return
-    location = choose_location(locations, "Куда перемещаем:")
+    location = choose_from_list(locations, "Куда перемещаем:")
     if location is None:
         print("Выдача отменена.")
         return
     purpose = input_nonempty("Цель (репетиция / спектакль / прочее): ")
     try:
-        issue_prop(
-            props,
-            movements,
-            prop["id"],
-            employee.id,
-            location.id,
-            purpose,
-        )
+        issue_prop(movements, prop, employee, location, purpose)
     except ValueError as exc:
         print(f"Ошибка: {exc}.")
         return
     save_props(props)
     save_movements(movements)
     print(
-        f"«{prop['name']}» выдан: {employee.full_name}, "
+        f"«{prop.name}» выдан: {employee.full_name}, "
         f"локация «{location.name}» ({purpose})."
     )
 
 
 def return_prop_flow(
-    props: dict[int, dict],
-    movements: list[dict],
+    props: list[Prop],
+    movements: list[Movement],
     locations: list[Location],
 ) -> None:
     """Диалог возврата реквизита."""
@@ -296,11 +233,11 @@ def return_prop_flow(
     if not issued:
         print("Нет выданных предметов.")
         return
-    prop = choose_prop(issued, "Какой предмет возвращают?", locations)
+    prop = choose_from_list(issued, "Какой предмет возвращают?")
     if prop is None:
         print("Возврат отменён.")
         return
-    location = choose_location(locations, "Принять на локацию:")
+    location = choose_from_list(locations, "Принять на локацию:")
     if location is None:
         print("Возврат отменён.")
         return
@@ -309,26 +246,21 @@ def return_prop_flow(
         "Зафиксируйте состояние предмета:",
     )
     if condition is None:
-        condition = prop["condition"]
+        condition = prop.condition
         print(f"Состояние оставлено без изменений: {condition}")
     try:
-        return_prop(props, movements, prop["id"], location.id, condition)
+        return_prop(movements, prop, location, condition)
     except ValueError as exc:
         print(f"Ошибка: {exc}.")
         return
     save_props(props)
     save_movements(movements)
-    print(f"«{prop['name']}» принят на «{location.name}».")
-    if condition in ("изношено", "требует ремонта"):
+    print(f"«{prop.name}» принят на «{location.name}».")
+    if prop.needs_repair():
         print("Рекомендация: направить предмет на реставрацию.")
 
 
-def show_journal_flow(
-    movements: list[dict],
-    props: dict[int, dict],
-    locations: list[Location],
-    employees: list[Employee],
-) -> None:
+def show_journal_flow(movements: list[Movement]) -> None:
     """Вывести последние перемещения реквизита."""
     print("\n--- Журнал перемещений (последние 20) ---")
     if not movements:
@@ -336,84 +268,72 @@ def show_journal_flow(
         return
     recent = movements[-20:]
     for movement in reversed(recent):
-        prop = props.get(movement["prop_id"])
-        prop_label = f"[{prop['inventory_number']}] {prop['name']}"
-        location = find_by_id(locations, movement["location_id"])
-        location_name = location.name if location else "—"
-        employee = find_by_id(employees, movement["employee_id"])
-        employee_name = str(employee) if employee else "—"
-        moved_at = datetime.fromisoformat(movement["moved_at"])
-        arrow = "→" if movement["movement_type"] == MOVEMENT_ISSUE else "←"
-        print(
-            f"{moved_at:%d.%m.%Y %H:%M} {arrow} {prop_label} | "
-            f"{location_name} | {employee_name} | {movement['purpose']}"
-        )
+        print(f"  {movement}")
 
 # --- Бронирование ---
 
 
+def format_reservation(
+    reservation: dict,
+    props: list[Prop],
+    productions: list[Production],
+) -> str:
+    """Строка бронирования для списков."""
+    prop = find_by_id(props, reservation["prop_id"])
+    prop_name = prop.name if prop else "—"
+    production = find_by_id(productions, reservation["production_id"])
+    production_title = production.title if production else "—"
+    return (
+        f"[{reservation['id']}] {reservation['date']} — "
+        f"{prop_name} — {production_title}"
+    )
+
+
 def check_availability_flow(
-    props: dict[int, dict],
+    props: list[Prop],
     reservations: list[dict],
-    locations: list[Location],
     productions: list[Production],
 ) -> None:
     """Диалог проверки доступности предмета на дату."""
     print("\n--- Проверка доступности ---")
-    prop = choose_prop(
-        list(props.values()),
-        "Какой предмет проверить?",
-        locations,
-    )
+    prop = choose_from_list(props, "Какой предмет проверить?")
     if prop is None:
         return
     target_date = input_date("Дата: ")
-    available = is_prop_available(
-        props, reservations, prop["id"], target_date
-    )
+    available = is_prop_available(prop, reservations, target_date)
+    print(get_reservation_status(available))
     if available:
-        print(get_reservation_status(available))
         return
-    if prop["status"] in BLOCKING_STATUSES:
-        print(f"Предмет недоступен (статус: {prop['status']}).")
+    if not prop.is_bookable():
+        print(f"Предмет недоступен (статус: {prop.status}).")
         return
-    conflict = find_reservation(reservations, prop["id"], target_date)
+    conflict = find_reservation(reservations, prop, target_date)
+    if conflict is None:
+        print("Причина недоступности не определена.")
+        return
     production = find_by_id(productions, conflict["production_id"])
     production_title = production.title if production else "—"
-    print(get_reservation_status(available))
     print(f"На эту дату предмет уже забронирован: {production_title}.")
 
 
 def create_reservation_flow(
-    props: dict[int, dict],
+    props: list[Prop],
     reservations: list[dict],
-    locations: list[Location],
     productions: list[Production],
 ) -> None:
     """Диалог бронирования предмета на дату."""
     print("\n--- Бронирование предмета ---")
-    candidates = [
-        prop
-        for prop in props.values()
-        if prop["status"] not in BLOCKING_STATUSES
-    ]
+    candidates = [prop for prop in props if prop.is_bookable()]
     if not candidates:
         print("Нет предметов, доступных для бронирования.")
         return
-    prop = choose_prop(
-        candidates,
-        "Какой предмет забронировать?",
-        locations,
-    )
+    prop = choose_from_list(candidates, "Какой предмет забронировать?")
     if prop is None:
         print("Бронирование отменено.")
         return
     target_date = input_date("Дата бронирования: ")
-    available = is_prop_available(
-        props, reservations, prop["id"], target_date
-    )
-    if not available:
-        conflict = find_reservation(reservations, prop["id"], target_date)
+    if not is_prop_available(prop, reservations, target_date):
+        conflict = find_reservation(reservations, prop, target_date)
         if conflict is not None:
             production = find_by_id(
                 productions, conflict["production_id"]
@@ -424,7 +344,7 @@ def create_reservation_flow(
                 f"({title})."
             )
         else:
-            print(f"Предмет недоступен (статус: {prop['status']}).")
+            print(f"Предмет недоступен (статус: {prop.status}).")
         return
     print("Постановка: 1 — из репертуара, 2 — новая, 0 — отмена")
     mode = input_int("Выбор: ")
@@ -435,10 +355,7 @@ def create_reservation_flow(
         if not productions:
             print("Репертуар пуст — сначала создайте постановку.")
             return
-        production = choose_from_list(
-            productions,
-            "Постановка:",
-        )
+        production = choose_from_list(productions, "Постановка:")
         if production is None:
             print("Бронирование отменено.")
             return
@@ -452,9 +369,8 @@ def create_reservation_flow(
         return
     try:
         reservation = create_reservation(
-            props,
             reservations,
-            prop["id"],
+            prop,
             target_date,
             production.id,
         )
@@ -463,7 +379,7 @@ def create_reservation_flow(
         return
     save_reservations(reservations)
     print(
-        f"Предмет «{prop['name']}» забронирован на "
+        f"Предмет «{prop.name}» забронирован на "
         f"{target_date:%d.%m.%Y} для {production.title} "
         f"(ID {reservation['id']})."
     )
@@ -471,7 +387,7 @@ def create_reservation_flow(
 
 def cancel_reservation_flow(
     reservations: list[dict],
-    props: dict[int, dict],
+    props: list[Prop],
     productions: list[Production],
 ) -> None:
     """Диалог отмены бронирования."""
@@ -505,7 +421,7 @@ def cancel_reservation_flow(
 
 def show_reservations_flow(
     reservations: list[dict],
-    props: dict[int, dict],
+    props: list[Prop],
     productions: list[Production],
 ) -> None:
     """Вывести список бронирований."""
@@ -557,24 +473,24 @@ def add_production_flow(productions: list[Production]) -> Production | None:
 
 
 def run_inventory_flow(
-    props: dict[int, dict],
+    props: list[Prop],
     locations: list[Location],
 ) -> None:
     """Диалог инвентаризации по выбранной локации."""
     print("\n--- Инвентаризация ---")
-    location = choose_location(locations, "Локация для сверки:")
+    location = choose_from_list(locations, "Локация для сверки:")
     if location is None:
         print("Инвентаризация отменена.")
         return
-    to_check = select_props_for_check(props, location.id)
+    to_check = select_props_for_check(props, location)
     if not to_check:
         print(f"На локации «{location.name}» нечего сверять.")
         return
     print(f"К сверке: {len(to_check)} шт. Ответы: y (да) / n (нет).")
     answers: dict[int, bool] = {}
     for prop in to_check:
-        label = f"[{prop['inventory_number']}] {prop['name']}"
-        answers[prop["id"]] = input_yes_no(f"{label} — найден? ")
+        label = f"[{prop.inventory_number}] {prop.name}"
+        answers[prop.id] = input_yes_no(f"{label} — найден? ")
     found, missing = split_by_answers(to_check, answers)
     print("\n===== ОТЧЁТ ОБ ИНВЕНТАРИЗАЦИИ =====")
     print(f"Локация: {location.name}")
@@ -586,9 +502,9 @@ def run_inventory_flow(
     if missing:
         print("Расхождения (числится, но не найдено):")
         for prop in missing:
-            print(f"  [{prop['inventory_number']}] {prop['name']}")
+            print(f"  [{prop.inventory_number}] {prop.name}")
         if input_yes_no("Пометить ненайденные как «утерян»? "):
-            updated = mark_missing_lost(props, missing)
+            updated = mark_missing_lost(missing)
             save_props(props)
             print(f"Статус «утерян» присвоен {updated} предметам.")
     report = build_report(location.name, found, missing)
@@ -597,13 +513,10 @@ def run_inventory_flow(
         print(f"Отчёт сохранён: {path}")
 
 
-def show_stats_flow(
-    props: dict[int, dict],
-    locations: list[Location],
-) -> None:
+def show_stats_flow(props: list[Prop]) -> None:
     """Вывести сводную статистику каталога."""
     print("\n--- Статистика реквизита ---")
-    stats = get_stats(props, locations)
+    stats = get_stats(props)
     print(f"Всего предметов: {stats['total']}")
     print(f"Требуют ремонта: {stats['needs_repair']}")
     print("\nПо статусам:")
@@ -672,8 +585,8 @@ def main() -> None:
     locations = load_locations()
     employees = load_employees()
     productions = load_productions()
-    props = load_props()
-    movements = load_movements()
+    props = load_props(locations)
+    movements = load_movements(props, locations, employees)
     reservations = load_reservations()
 
     print("=== THEATER PROPS — учёт театрального реквизита ===")
@@ -686,22 +599,20 @@ def main() -> None:
         f"бронирований — {len(reservations)}."
     )
 
-    actions: dict[int, Callable[[], None]] = {
-        1: lambda: show_catalog_flow(props, locations),
+    actions: dict[int, Callable[[], object]] = {
+        1: lambda: show_catalog_flow(props),
         2: lambda: add_prop_flow(props, locations),
-        3: lambda: find_props_flow(props, locations),
+        3: lambda: find_props_flow(props),
         4: lambda: issue_prop_flow(
             props, movements, locations, employees
         ),
         5: lambda: return_prop_flow(props, movements, locations),
-        6: lambda: show_journal_flow(
-            movements, props, locations, employees
-        ),
+        6: lambda: show_journal_flow(movements),
         7: lambda: check_availability_flow(
-            props, reservations, locations, productions
+            props, reservations, productions
         ),
         8: lambda: create_reservation_flow(
-            props, reservations, locations, productions
+            props, reservations, productions
         ),
         9: lambda: cancel_reservation_flow(
             reservations, props, productions
@@ -712,7 +623,7 @@ def main() -> None:
         11: lambda: show_productions_flow(productions),
         12: lambda: add_production_flow(productions),
         13: lambda: run_inventory_flow(props, locations),
-        14: lambda: show_stats_flow(props, locations),
+        14: lambda: show_stats_flow(props),
         15: lambda: show_locations(locations),
         16: lambda: add_location_flow(locations),
         17: lambda: show_employees(employees),
