@@ -5,6 +5,9 @@
 и локациям, количество предметов, требующих ремонта.
 """
 
+from models.locations import Location
+from utils import find_by_id
+
 
 def count_values(values: list[str]) -> dict[str, int]:
     """Подсчитать количество повторений каждого значения."""
@@ -14,15 +17,15 @@ def count_values(values: list[str]) -> dict[str, int]:
     return counts
 
 
-def _location_name(prop: dict, locations: dict[int, dict]) -> str:
+def _location_name(prop: dict, locations: list[Location]) -> str:
     """Вернуть имя локации предмета или прочерк."""
-    location = locations.get(prop["location_id"])
-    return location["name"] if location else "—"
+    location = find_by_id(locations, prop["location_id"])
+    return location.name if location else "—"
 
 
 def get_stats(
     props: dict[int, dict],
-    locations: dict[int, dict],
+    locations: list[Location],
 ) -> dict:
     """Собрать сводную статистику по каталогу реквизита.
 

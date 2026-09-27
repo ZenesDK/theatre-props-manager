@@ -5,11 +5,20 @@
 файла ошибкой не считается — возвращается пустая коллекция
 (первый запуск). Повреждённый JSON прерывает запуск программы
 с понятным сообщением вместо аварийной трассировки.
+
+Локации, сотрудники и постановки — объекты классов пакета
+models: при загрузке записи JSON превращаются в объекты,
+при сохранении выполняется обратное преобразование. Предметы,
+перемещения и бронирования на этом этапе остаются словарями.
 """
 
 import json
 import sys
 from pathlib import Path
+
+from models.employees import Employee
+from models.locations import Location
+from models.productions import Production
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
@@ -49,34 +58,46 @@ def _to_list(mapping: dict[int, dict]) -> list[dict]:
     return [mapping[key] for key in sorted(mapping)]
 
 
-def load_locations() -> dict[int, dict]:
+def load_locations() -> list[Location]:
     """Загрузить справочник локаций."""
-    return _to_map(_load_items("locations.json"))
+    items = _load_items("locations.json")
+    return [Location.from_data(item) for item in items]
 
 
-def save_locations(locations: dict[int, dict]) -> None:
+def save_locations(locations: list[Location]) -> None:
     """Сохранить справочник локаций."""
-    _save_items("locations.json", _to_list(locations))
+    _save_items(
+        "locations.json",
+        [location.to_data() for location in locations],
+    )
 
 
-def load_employees() -> dict[int, dict]:
+def load_employees() -> list[Employee]:
     """Загрузить справочник сотрудников."""
-    return _to_map(_load_items("employees.json"))
+    items = _load_items("employees.json")
+    return [Employee.from_data(item) for item in items]
 
 
-def save_employees(employees: dict[int, dict]) -> None:
+def save_employees(employees: list[Employee]) -> None:
     """Сохранить справочник сотрудников."""
-    _save_items("employees.json", _to_list(employees))
+    _save_items(
+        "employees.json",
+        [employee.to_data() for employee in employees],
+    )
 
 
-def load_productions() -> dict[int, dict]:
+def load_productions() -> list[Production]:
     """Загрузить справочник постановок."""
-    return _to_map(_load_items("productions.json"))
+    items = _load_items("productions.json")
+    return [Production.from_data(item) for item in items]
 
 
-def save_productions(productions: dict[int, dict]) -> None:
+def save_productions(productions: list[Production]) -> None:
     """Сохранить справочник постановок."""
-    _save_items("productions.json", _to_list(productions))
+    _save_items(
+        "productions.json",
+        [production.to_data() for production in productions],
+    )
 
 
 def load_props() -> dict[int, dict]:

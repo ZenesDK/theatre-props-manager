@@ -1,5 +1,6 @@
 """Тесты функций статистики."""
 
+from models.locations import Location
 from stats import count_values, get_stats
 
 
@@ -39,12 +40,12 @@ def make_props() -> dict[int, dict]:
     }
 
 
-def make_locations() -> dict[int, dict]:
+def make_locations() -> list[Location]:
     """Справочник из двух локаций."""
-    return {
-        1: {"id": 1, "name": "Склад №1"},
-        2: {"id": 2, "name": "Малая сцена"},
-    }
+    return [
+        Location(1, "Склад №1"),
+        Location(2, "Малая сцена"),
+    ]
 
 
 def test_count_values():

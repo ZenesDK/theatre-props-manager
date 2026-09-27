@@ -101,12 +101,28 @@ def choose_from_list(
     return None
 
 
-def next_id(collection: dict[int, dict] | list[dict]) -> int:
+def find_by_id(items: list, item_id: int | None) -> object | None:
+    """Найти элемент коллекции по идентификатору.
+
+    Подходит для списков объектов с атрибутом id. Возвращает
+    None, если элемент не найден (в том числе при item_id=None).
+    """
+    for item in items:
+        if item.id == item_id:
+            return item
+    return None
+
+
+def next_id(collection: dict | list) -> int:
     """Вернуть следующий свободный идентификатор коллекции.
 
-    Подходит для словаря вида {id: запись} и для списка записей
-    с полем id. Для пустой коллекции возвращается 1.
+    Переходный этап ПР3: поддерживает словарь вида {id: dict},
+    список словарей с полем id и список объектов с атрибутом id.
+    Для пустой коллекции возвращается 1.
     """
     if isinstance(collection, dict):
         return max(collection, default=0) + 1
-    return max((item["id"] for item in collection), default=0) + 1
+    ids = []
+    for item in collection:
+        ids.append(item.id if hasattr(item, "id") else item["id"])
+    return max(ids, default=0) + 1
