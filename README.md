@@ -13,7 +13,17 @@
 
 ## Целевая аудитория
 
-* **Заведующие постановочной частью (завпосты)** — контроль готовности
+* **Заведующие постановочной частью (зgit add productions.py storage.py utils.py reservations.py main.py data/productions.json data/reservations.json tests/test_productions.py tests/test_reservations.py**
+* **git commit -m "ПР2: постановки выделены в отдельный файл, брони ссылаются по id"**
+* **git pushgit add productions.py storage.py utils.py reservations.py main.py data/productions.json data/reservations.json tests/test_productions.py tests/test_reservations.py**
+* **git commit -m "ПР2: постановки выделены в отдельный файл, брони ссылаются по id"**
+* **git pushgit add productions.py storage.py utils.py reservations.py main.py data/productions.json data/reservations.json tests/test_productions.py tests/test_reservations.py**
+* **git commit -m "ПР2: постановки выделены в отдельный файл, брони ссылаются по id"**
+* **git pushgit add productions.py storage.py utils.py reservations.py main.py data/productions.json data/reservations.json tests/test_productions.py tests/test_reservations.py**
+* **git commit -m "ПР2: постановки выделены в отдельный файл, брони ссылаются по id"**
+* **git pushgit add productions.py storage.py utils.py reservations.py main.py data/productions.json data/reservations.json tests/test_productions.py tests/test_reservations.py**
+* **git commit -m "ПР2: постановки выделены в отдельный файл, брони ссылаются по id"**
+* **git pushавпосты)** — контроль готовности
   материальной базы к спектаклям.
 * **Заведующие складами и реквизиторы** — оперативный учёт, выдача
   и приёмка предметов.
@@ -36,6 +46,10 @@
 * **Спектакль (Production)** — на текущем этапе представляется строкой
   в бронировании; полноценная сущность будет введена при переходе к ООП.
 
+* **Постановка (Production)** — название, режиссёр, дата премьеры.
+  Хранится в отдельном файле данных; бронирования ссылаются на
+  постановку по идентификатору.
+
 ## Возможности (версия ПР2)
 
 * **Каталогизация:** добавление предметов с контролем уникальности
@@ -46,6 +60,8 @@
   и цели; возврат с фиксацией состояния; журнал перемещений.
 * **Бронирование:** проверка доступности предмета на дату; создание
   и отмена бронирований; запрет повторного бронирования на ту же дату.
+* **Репертуар:** ведение списка постановок — название, режиссёр,
+  дата премьеры.
 * **Инвентаризация:** сверка наличия по локации; отметка ненайденных
   предметов как утерянных; отчёт в JSON.
 * **Статистика:** распределения предметов по статусам, категориям
@@ -54,28 +70,29 @@
 
 ## Структура проекта
 
-| Файл / каталог | Назначение |
-|---|---|
-| main.py | Точка запуска: меню и диалоги |
-| props.py | Каталог: добавление, поиск, фильтры, сортировка |
-| movements.py | Выдача и возврат реквизита |
-| reservations.py | Бронирование: доступность, создание, отмена |
-| inventory.py | Инвентаризация и отчёты |
-| stats.py | Статистика каталога |
-| directory.py | Справочники: локации и сотрудники |
-| storage.py | Загрузка и сохранение JSON-данных |
-| utils.py | Безопасный ввод, генерация идентификаторов |
-| conftest.py | Конфигурация pytest (путь импорта) |
-| setup.cfg | Настройки flake8 (исключён .venv) |
-| requirements.txt | Инструменты разработки: pytest, flake8 |
-| data/ | JSON-данные приложения (коммитится) |
-| reports/ | Отчёты инвентаризаций (в .gitignore) |
-| tests/ | Автоматические тесты pytest (57 тестов) |
+| Файл / каталог | Назначение                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| main.py                   | Точка запуска: меню и диалоги                                  |
+| props.py                  | Каталог: добавление, поиск, фильтры, сортировка |
+| movements.py              | Выдача и возврат реквизита                                      |
+| reservations.py           | Бронирование: доступность, создание, отмена       |
+| productions.py | Репертуар: справочник постановок |
+| inventory.py              | Инвентаризация и отчёты                                           |
+| stats.py                  | Статистика каталога                                                  |
+| directory.py              | Справочники: локации и сотрудники                         |
+| storage.py                | Загрузка и сохранение JSON-данных                             |
+| utils.py                  | Безопасный ввод, генерация идентификаторов       |
+| conftest.py               | Конфигурация pytest (путь импорта)                              |
+| setup.cfg                 | Настройки flake8 (исключён .venv)                                     |
+| requirements.txt          | Инструменты разработки: pytest, flake8                            |
+| data/                     | JSON-данные приложения (коммитится)                          |
+| reports/                  | Отчёты инвентаризаций (в .gitignore)                              |
+| tests/                    | Автоматические тесты pytest (57 тестов)                       |
 
 ## Формат хранения данных
 
 Данные приложения хранятся в JSON-файлах каталога `data/`:
-`props.json`, `locations.json`, `employees.json`, `movements.json`,
+`props.json`, `locations.json`, `employees.json`, `movements.json`, `reservations.py`
 `reservations.json` — списки словарей с полем `id`. Даты хранятся
 в ISO-формате (`ГГГГ-ММ-ДД`). Данные загружаются при запуске
 и сохраняются сразу после каждого изменения. Отчёты инвентаризации
