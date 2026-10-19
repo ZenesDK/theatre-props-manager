@@ -1,0 +1,57 @@
+/*
+ * Собственные стили проекта TheaterProps (ПР6).
+ * Bootstrap отвечает за базовую вёрстку, этот файл — за
+ * оформление элементов интерфейса проекта.
+ */
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex-grow: 1;
+}
+
+/* Логотип в шапке сайта. */
+.theaterprops-logo {
+    width: 56px;
+    height: auto;
+    margin: 0.6rem 0.75rem 0;
+}
+
+/* Карточки предметов реквизита. */
+.prop-card {
+    border: 1px solid #e5e0da;
+    border-left: 4px solid #7b2d3b;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.prop-card .card-title a {
+    text-decoration: none;
+    color: #46362f;
+}
+
+.prop-card .card-title a:hover {
+    color: #7b2d3b;
+}
+
+/* Общее начертание статусных бейджей. */
+.status-badge,
+.reservation-status {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* Активный пункт навигации (подсвечивает main.js). */
+.nav-link.active {
+    font-weight: 600;
+    color: #7b2d3b;
+}
+
+/* Подвал страницы. */
+.site-footer {
+    font-size: 0.9rem;
+}
