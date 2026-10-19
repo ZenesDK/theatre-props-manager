@@ -1,0 +1,13 @@
+{# Статус бронирования: по состоянию is_cancelled объекта. #}
+{# Один и тот же фрагмент используется в списке и на карточке. #}
+{% if reservation.is_cancelled %}
+<span class="badge bg-secondary reservation-status
+              reservation-status-cancelled">
+    отменена
+</span>
+{% else %}
+<span class="badge bg-success reservation-status
+              reservation-status-active">
+    активна
+</span>
+{% endif %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}
+Бронирования – TheaterProps
+{% endblock %}
+
+{% block content %}
+<h1>Бронирования</h1>
+<p class="text-muted">Всего броней: {{ reservations|length }}</p>
+
+<ul class="list-group">
+    {% for reservation in reservations %}
+    <li class="list-group-item d-flex justify-content-between
+                align-items-center">
+        <a href="{% url 'reservations:reservation_detail'
+                  reservation.id %}">
+            №{{ reservation.id }} — {{ reservation.prop.name }} —
+            {{ reservation.date|date:"d.m.Y" }} —
+            {{ reservation.production.title }}
+        </a>
+        {% include "reservations/includes/reservation_status.html" %}
+    </li>
+    {% empty %}
+    <li class="list-group-item">Бронирования не найдены.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

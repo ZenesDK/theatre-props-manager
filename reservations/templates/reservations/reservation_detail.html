@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if reservation %}
+Бронирование №{{ reservation.id }} – TheaterProps
+{% else %}
+Бронирование не найдено – TheaterProps
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if reservation %}
+<div class="card prop-card">
+    <div class="card-body">
+        <h1 class="card-title h3">
+            Бронирование №{{ reservation.id }}
+        </h1>
+
+        <p class="card-text">
+            Предмет:
+            <a href="{% url 'props:prop_detail'
+                      reservation.prop.id %}">
+                {{ reservation.prop.name }}
+            </a>
+        </p>
+        <p class="card-text">
+            <strong>Дата постановки:</strong>
+            {{ reservation.date|date:"d.m.Y" }}
+        </p>
+        <p class="card-text">
+            <strong>Постановка:</strong>
+            {{ reservation.production.title }}
+        </p>
+        <p class="card-text">
+            <strong>Оформил:</strong>
+            {% if reservation.reserved_by %}
+                {{ reservation.reserved_by.full_name }}
+            {% else %}
+                —
+            {% endif %}
+        </p>
+        <p class="card-text">
+            Статус:
+            {% include "reservations/includes/reservation_status.html" %}
+        </p>
+
+        <a href="{% url 'reservations:reservations' %}"
+           class="btn btn-outline-secondary mt-2">
+            ← к списку бронирований
+        </a>
+    </div>
+</div>
+{% else %}
+<h1 class="text-danger">Бронирование не найдено</h1>
+<p>Бронирование с указанным идентификатором отсутствует.</p>
+<a href="{% url 'reservations:reservations' %}"
+   class="btn btn-outline-secondary">
+    ← к списку бронирований
+</a>
+{% endif %}
+{% endblock %}
