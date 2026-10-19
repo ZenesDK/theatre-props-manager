@@ -1,0 +1,14 @@
+{# Статус предмета: выбирается по значению prop.status. #}
+{% if prop.status == "на складе" %}
+<span class="badge bg-success status-badge">на складе</span>
+{% elif prop.status == "выдан" %}
+<span class="badge bg-warning text-dark status-badge">выдан</span>
+{% elif prop.status == "в ремонте" %}
+<span class="badge bg-info text-dark status-badge">в ремонте</span>
+{% elif prop.status == "утерян" %}
+<span class="badge bg-danger status-badge">утерян</span>
+{% elif prop.status == "списан" %}
+<span class="badge bg-secondary status-badge">списан</span>
+{% else %}
+<span class="badge bg-secondary status-badge">{{ prop.status }}</span>
+{% endif %}

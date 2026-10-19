@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if prop %}
+{{ prop.name }} – TheaterProps
+{% else %}
+Предмет не найден – TheaterProps
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if prop %}
+<div class="card prop-card">
+    <div class="card-body">
+        <h1 class="card-title h3">{{ prop.name }}</h1>
+
+        <p class="card-text">
+            <strong>Инвентарный номер:</strong>
+            {{ prop.inventory_number }}
+        </p>
+        <p class="card-text">
+            <strong>Категория:</strong> {{ prop.category }}
+        </p>
+        <p class="card-text">
+            <strong>Состояние:</strong> {{ prop.condition }}
+        </p>
+        <p class="card-text">
+            <strong>Локация:</strong>
+            {{ prop.location.name|default:"не указана" }}
+        </p>
+        <p class="card-text">
+            Статус:
+            {% include "props/includes/prop_status.html" %}
+        </p>
+        <p class="card-text">
+            Бронирование на текущую дату:
+            {% if available %}
+            <span class="badge bg-success status-badge">
+                свободен на сегодня
+            </span>
+            {% else %}
+            <span class="badge bg-danger status-badge">
+                занят на сегодня
+            </span>
+            {% endif %}
+        </p>
+        <p class="card-text">
+            <strong>Ближайшая бронь:</strong>
+            {% if upcoming %}
+                {{ upcoming.date|date:"d.m.Y" }} —
+                {{ upcoming.production.title }}
+            {% else %}
+                нет активных броней
+            {% endif %}
+        </p>
+
+        <a href="{% url 'props:props' %}"
+           class="btn btn-outline-secondary mt-2">
+            ← к списку реквизита
+        </a>
+    </div>
+</div>
+{% else %}
+<h1 class="text-danger">Предмет не найден</h1>
+<p>Предмет с указанным идентификатором отсутствует.</p>
+<a href="{% url 'props:props' %}" class="btn btn-outline-secondary">
+    ← к списку реквизита
+</a>
+{% endif %}
+{% endblock %}
