@@ -9,6 +9,7 @@ from inventory import (
     split_by_answers,
 )
 from models.locations import Location
+from models.movements import MOVEMENT_LOSS, Movement
 from models.props import (
     STATUS_IN_STOCK,
     STATUS_ISSUED,
@@ -95,22 +96,30 @@ def test_build_report():
     ]
 
 
-def test_mark_missing_lost_changes_status():
+def test_mark_missing_lost_changes_status_and_logs():
     props = make_props()
+    movements: list[Movement] = []
     missing = [props[0], props[1]]
-    updated = mark_missing_lost(missing)
+    updated = mark_missing_lost(missing, movements)
     assert updated == 2
     assert props[0].status == STATUS_LOST
     assert props[1].status == STATUS_LOST
+    assert len(movements) == 2
+    assert movements[0].movement_type == MOVEMENT_LOSS
+    assert movements[0].prop is props[0]
+    assert movements[0].location is WAREHOUSE
 
 
 def test_mark_missing_lost_skips_already_lost():
     props = make_props()
+    movements: list[Movement] = []
     missing = [props[0], props[4]]
-    updated = mark_missing_lost(missing)
+    updated = mark_missing_lost(missing, movements)
     assert updated == 1
     assert props[4].status == STATUS_LOST
+    assert len(movements) == 1
+    assert movements[0].prop is props[0]
 
 
 def test_mark_missing_lost_empty():
-    assert mark_missing_lost([]) == 0
+    assert mark_missing_lost([], []) == 0

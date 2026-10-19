@@ -7,5 +7,41 @@
     "employee_id": 1,
     "purpose": "репетиция спектакля «Маскарад»",
     "moved_at": "2026-09-15T14:30:00"
+  },
+  {
+    "id": 2,
+    "prop_id": 6,
+    "movement_type": "выдача",
+    "location_id": 1,
+    "employee_id": 1,
+    "purpose": "репетиция",
+    "moved_at": "2026-09-27T20:24:41"
+  },
+  {
+    "id": 3,
+    "prop_id": 4,
+    "movement_type": "возврат",
+    "location_id": 1,
+    "employee_id": null,
+    "purpose": "возврат на хранение",
+    "moved_at": "2026-09-27T20:24:57"
+  },
+  {
+    "id": 4,
+    "prop_id": 7,
+    "movement_type": "выдача",
+    "location_id": 1,
+    "employee_id": 1,
+    "purpose": "репетиция",
+    "moved_at": "2026-09-27T20:31:40"
+  },
+  {
+    "id": 5,
+    "prop_id": 6,
+    "movement_type": "возврат",
+    "location_id": 1,
+    "employee_id": null,
+    "purpose": "возврат на хранение",
+    "moved_at": "2026-09-27T20:31:47"
   }
 ]

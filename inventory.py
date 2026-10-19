@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from models.locations import Location
+from models.movements import Movement, record_loss
 from models.props import STATUS_LOST, STATUS_WRITTEN_OFF, Prop
 
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
@@ -80,16 +81,21 @@ def build_report(
     }
 
 
-def mark_missing_lost(missing: list[Prop]) -> int:
+def mark_missing_lost(
+    missing: list[Prop],
+    movements: list[Movement],
+) -> int:
     """Пометить ненайденные предметы как утерянные.
 
-    Возвращает количество предметов, сменивших статус:
-    уже утерянные предметы повторно не пересчитываются.
+    Для каждого предмета, сменившего статус, в журнал
+    добавляется запись об утере (record_loss). Возвращает
+    количество изменившихся предметов: уже утерянные
+    повторно не пересчитываются и в журнал не попадают.
     """
     updated = 0
     for prop in missing:
         if prop.status != STATUS_LOST:
-            prop.mark_lost()
+            record_loss(movements, prop)
             updated += 1
     return updated
 

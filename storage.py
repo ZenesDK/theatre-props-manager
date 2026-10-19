@@ -14,7 +14,9 @@ models: при загрузке записи JSON превращаются в о
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from models.employees import Employee
 from models.locations import Location
@@ -40,6 +42,27 @@ def _load_items(filename: str) -> list[dict]:
         sys.exit("Восстановите файл данных и запустите программу снова.")
 
 
+def _convert_items(
+    filename: str,
+    items: list[dict],
+    factory: Callable[[dict], Any],
+) -> list[Any]:
+    """Превратить записи JSON в объекты предметной области.
+
+    Битая ссылка (запись указывает на несуществующий объект)
+    или пропущенное обязательное поле прерывают запуск с
+    понятным сообщением вместо аварийной трассировки.
+    """
+    try:
+        return [factory(item) for item in items]
+    except ValueError as exc:
+        print(f"Файл {filename}: битая ссылка в записи ({exc}).")
+        sys.exit("Восстановите файл данных и запустите программу снова.")
+    except KeyError as exc:
+        print(f"Файл {filename}: в записи отсутствует поле {exc}.")
+        sys.exit("Восстановите файл данных и запустите программу снова.")
+
+
 def _save_items(filename: str, items: list[dict]) -> None:
     """Записать список записей в JSON-файл."""
     DATA_DIR.mkdir(exist_ok=True)
@@ -54,7 +77,7 @@ def _save_items(filename: str, items: list[dict]) -> None:
 def load_locations() -> list[Location]:
     """Загрузить справочник локаций."""
     items = _load_items("locations.json")
-    return [Location.from_data(item) for item in items]
+    return _convert_items("locations.json", items, Location.from_data)
 
 
 def save_locations(locations: list[Location]) -> None:
@@ -68,7 +91,7 @@ def save_locations(locations: list[Location]) -> None:
 def load_employees() -> list[Employee]:
     """Загрузить справочник сотрудников."""
     items = _load_items("employees.json")
-    return [Employee.from_data(item) for item in items]
+    return _convert_items("employees.json", items, Employee.from_data)
 
 
 def save_employees(employees: list[Employee]) -> None:
@@ -82,7 +105,7 @@ def save_employees(employees: list[Employee]) -> None:
 def load_productions() -> list[Production]:
     """Загрузить справочник постановок."""
     items = _load_items("productions.json")
-    return [Production.from_data(item) for item in items]
+    return _convert_items("productions.json", items, Production.from_data)
 
 
 def save_productions(productions: list[Production]) -> None:
@@ -96,7 +119,11 @@ def save_productions(productions: list[Production]) -> None:
 def load_props(locations: list[Location]) -> list[Prop]:
     """Загрузить каталог предметов реквизита."""
     items = _load_items("props.json")
-    return [Prop.from_data(item, locations) for item in items]
+    return _convert_items(
+        "props.json",
+        items,
+        lambda item: Prop.from_data(item, locations),
+    )
 
 
 def save_props(props: list[Prop]) -> None:
@@ -114,10 +141,11 @@ def load_movements(
 ) -> list[Movement]:
     """Загрузить журнал перемещений."""
     items = _load_items("movements.json")
-    return [
-        Movement.from_data(item, props, locations, employees)
-        for item in items
-    ]
+    return _convert_items(
+        "movements.json",
+        items,
+        lambda item: Movement.from_data(item, props, locations, employees),
+    )
 
 
 def save_movements(movements: list[Movement]) -> None:
@@ -131,13 +159,17 @@ def save_movements(movements: list[Movement]) -> None:
 def load_reservations(
     props: list[Prop],
     productions: list[Production],
+    employees: list[Employee],
 ) -> list[Reservation]:
     """Загрузить список бронирований."""
     items = _load_items("reservations.json")
-    return [
-        Reservation.from_data(item, props, productions)
-        for item in items
-    ]
+    return _convert_items(
+        "reservations.json",
+        items,
+        lambda item: Reservation.from_data(
+            item, props, productions, employees
+        ),
+    )
 
 
 def save_reservations(reservations: list[Reservation]) -> None:

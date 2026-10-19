@@ -1,6 +1,8 @@
 """Бронирование реквизита: класс Reservation и функции коллекции.
 
-Бронирование хранит ссылки на объекты Prop и Production.
+Бронирование хранит ссылки на объекты Prop, Production
+и Employee (reserved_by — сотрудник, оформивший бронь,
+None, если оформитель не зафиксирован).
 Отмена выполняется методом cancel(): объект остаётся
 в коллекции (сохраняется история бронирований), но меняет
 состояние is_cancelled и перестаёт блокировать предмет.
@@ -8,6 +10,7 @@
 
 from datetime import date, datetime
 
+from models.employees import Employee
 from models.productions import Production
 from models.props import Prop
 from utils import find_by_id, next_id
@@ -24,6 +27,7 @@ class Reservation:
         production: Production,
         reserved_at: datetime,
         is_cancelled: bool = False,
+        reserved_by: Employee | None = None,
     ) -> None:
         """Создать объект бронирования."""
         self.id = reservation_id
@@ -32,6 +36,7 @@ class Reservation:
         self.production = production
         self.reserved_at = reserved_at
         self.is_cancelled = is_cancelled
+        self.reserved_by = reserved_by
 
     @classmethod
     def from_data(
@@ -39,11 +44,13 @@ class Reservation:
         data: dict,
         props: list[Prop],
         productions: list[Production],
+        employees: list[Employee],
     ) -> "Reservation":
         """Создать бронирование из данных JSON.
 
-        Ссылки на предмет и постановку восстанавливаются
-        по идентификаторам из коллекций.
+        Ссылки на предмет, постановку и оформителя
+        восстанавливаются по идентификаторам из коллекций;
+        оформитель необязателен (reserved_by_id = None).
 
         Raises:
             ValueError: если предмет или постановка по
@@ -58,6 +65,12 @@ class Reservation:
             raise ValueError(
                 f"Постановка {data['production_id']} не найдена"
             )
+        reserved_by_id = data.get("reserved_by_id")
+        reserved_by = (
+            find_by_id(employees, reserved_by_id)
+            if reserved_by_id is not None
+            else None
+        )
         return cls(
             reservation_id=data["id"],
             prop=prop,
@@ -65,6 +78,7 @@ class Reservation:
             production=production,
             reserved_at=datetime.fromisoformat(data["reserved_at"]),
             is_cancelled=data.get("is_cancelled", False),
+            reserved_by=reserved_by,
         )
 
     def to_data(self) -> dict:
@@ -76,6 +90,9 @@ class Reservation:
             "production_id": self.production.id,
             "reserved_at": self.reserved_at.isoformat(timespec="seconds"),
             "is_cancelled": self.is_cancelled,
+            "reserved_by_id": (
+                self.reserved_by.id if self.reserved_by else None
+            ),
         }
 
     def cancel(self) -> None:
@@ -93,9 +110,13 @@ class Reservation:
             status = "ОТМЕНЕНО"
         else:
             status = "активно"
+        if self.reserved_by is not None:
+            who = f", оформил: {self.reserved_by.full_name}"
+        else:
+            who = ""
         return (
             f"[{self.id}] {self.date:%d.%m.%Y} — {self.prop.name} — "
-            f"{self.production.title} ({status})"
+            f"{self.production.title} ({status}{who})"
         )
 
 
@@ -133,14 +154,39 @@ def is_prop_available(
     return find_reservation(reservations, prop, target_date) is None
 
 
+def find_upcoming_reservation(
+    reservations: list[Reservation],
+    prop: Prop,
+    from_date: date,
+) -> Reservation | None:
+    """Найти ближайшее активное бронирование от даты from_date.
+
+    Возвращает бронирование с наименьшей датой, которая не
+    раньше from_date, или None, если таких бронирований нет.
+    Отменённые бронирования не учитываются.
+    """
+    upcoming = [
+        reservation
+        for reservation in reservations
+        if reservation.prop.id == prop.id
+        and not reservation.is_cancelled
+        and reservation.date >= from_date
+    ]
+    if not upcoming:
+        return None
+    return min(upcoming, key=lambda item: item.date)
+
+
 def create_reservation(
     reservations: list[Reservation],
     prop: Prop,
     target_date: date,
     production: Production,
+    reserved_by: Employee | None = None,
 ) -> Reservation | None:
     """Создать бронирование и вернуть созданный объект.
 
+    reserved_by — сотрудник, оформивший бронь (необязательно).
     Возвращает None, если предмет недоступен на указанную
     дату: активное бронирование блокирует предмет.
     """
@@ -152,6 +198,7 @@ def create_reservation(
         date=target_date,
         production=production,
         reserved_at=datetime.now(),
+        reserved_by=reserved_by,
     )
     reservations.append(reservation)
     return reservation

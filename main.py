@@ -5,7 +5,7 @@
 Запуск: python main.py
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Callable
 
 from inventory import (
@@ -25,15 +25,23 @@ from models import (
 )
 from models.employees import add_employee
 from models.locations import add_location, find_location_by_name
-from models.movements import issue_prop, return_prop
+from models.movements import (
+    complete_repair,
+    issue_prop,
+    return_prop,
+    send_to_repair,
+    write_off_prop,
+)
 from models.productions import add_production, find_production_by_title
 from models.props import (
     CATEGORIES,
     CONDITIONS,
     SORT_OPTIONS,
     STATUSES,
+    STATUS_IN_REPAIR,
     STATUS_IN_STOCK,
     STATUS_ISSUED,
+    STATUS_LOST,
     add_prop,
     filter_props,
     find_prop_by_inventory_number,
@@ -44,6 +52,7 @@ from models.reservations import (
     cancel_reservation,
     create_reservation,
     find_reservation,
+    find_upcoming_reservation,
     get_reservation_status,
     is_prop_available,
 )
@@ -180,8 +189,14 @@ def issue_prop_flow(
     movements: list[Movement],
     locations: list[Location],
     employees: list[Employee],
+    reservations: list[Reservation],
 ) -> None:
-    """Диалог выдачи реквизита."""
+    """Диалог выдачи реквизита.
+
+    Перед выдачей проверяются активные брони предмета:
+    бронь на сегодня или на ближайшую дату не блокирует
+    выдачу, но выводится предупреждение.
+    """
     print("\n--- Выдача реквизита ---")
     in_stock = filter_props(props, status=STATUS_IN_STOCK)
     if not in_stock:
@@ -191,6 +206,7 @@ def issue_prop_flow(
     if prop is None:
         print("Выдача отменена.")
         return
+    warn_about_reservations(reservations, prop)
     employee = choose_from_list(
         employees,
         "Ответственный (кому выдаём):",
@@ -214,6 +230,32 @@ def issue_prop_flow(
         f"«{prop.name}» выдан: {employee.full_name}, "
         f"локация «{location.name}» ({purpose})."
     )
+
+
+def warn_about_reservations(
+    reservations: list[Reservation],
+    prop: Prop,
+) -> None:
+    """Предупредить о бронях, касающихся выдаваемого предмета.
+
+    Сначала проверяется бронь на сегодня, затем ближайшая
+    будущая: реквизитор узнаёт, к какой дате и под какую
+    постановку предмет нужно вернуть.
+    """
+    today = date.today()
+    booked_now = find_reservation(reservations, prop, today)
+    if booked_now is not None:
+        print(
+            "Внимание: на сегодня предмет забронирован "
+            f"({booked_now.production.title})."
+        )
+        return
+    upcoming = find_upcoming_reservation(reservations, prop, today)
+    if upcoming is not None:
+        print(
+            "Внимание: предмет забронирован на "
+            f"{upcoming.date:%d.%m.%Y} ({upcoming.production.title})."
+        )
 
 
 def return_prop_flow(
@@ -298,6 +340,7 @@ def create_reservation_flow(
     props: list[Prop],
     reservations: list[Reservation],
     productions: list[Production],
+    employees: list[Employee],
 ) -> None:
     """Диалог бронирования предмета на дату."""
     print("\n--- Бронирование предмета ---")
@@ -341,8 +384,16 @@ def create_reservation_flow(
     else:
         print("Нет такого пункта.")
         return
+    reserved_by = None
+    if not employees:
+        print("Справочник сотрудников пуст — бронь сохранена без оформителя.")
+    else:
+        reserved_by = choose_from_list(employees, "Кто оформляет бронь:")
+        if reserved_by is None:
+            print("Бронирование отменено.")
+            return
     reservation = create_reservation(
-        reservations, prop, target_date, production
+        reservations, prop, target_date, production, reserved_by
     )
     if reservation is None:
         print("Ошибка: предмет недоступен на выбранную дату.")
@@ -429,6 +480,7 @@ def add_production_flow(productions: list[Production]) -> Production | None:
 def run_inventory_flow(
     props: list[Prop],
     locations: list[Location],
+    movements: list[Movement],
 ) -> None:
     """Диалог инвентаризации по выбранной локации."""
     print("\n--- Инвентаризация ---")
@@ -458,9 +510,13 @@ def run_inventory_flow(
         for prop in missing:
             print(f"  [{prop.inventory_number}] {prop.name}")
         if input_yes_no("Пометить ненайденные как «утерян»? "):
-            updated = mark_missing_lost(missing)
+            updated = mark_missing_lost(missing, movements)
             save_props(props)
-            print(f"Статус «утерян» присвоен {updated} предметам.")
+            save_movements(movements)
+            print(
+                f"Статус «утерян» присвоен {updated} предметам, "
+                f"в журнал добавлено {updated} записей."
+            )
     report = build_report(location.name, found, missing)
     path = save_report(report)
     if path is not None:
@@ -488,6 +544,91 @@ def print_counts(counts: dict[str, int]) -> None:
         return
     for key, count in sorted(counts.items()):
         print(f"  {key}: {count}")
+
+# --- Ремонт и списание ---
+
+
+def send_to_repair_flow(
+    props: list[Prop],
+    movements: list[Movement],
+) -> None:
+    """Диалог отправки предмета в ремонт."""
+    print("\n--- Отправка в ремонт ---")
+    candidates = filter_props(props, status=STATUS_IN_STOCK)
+    if not candidates:
+        print("Нет предметов на складе.")
+        return
+    prop = choose_from_list(candidates, "Какой предмет в ремонт?")
+    if prop is None:
+        print("Операция отменена.")
+        return
+    try:
+        send_to_repair(movements, prop)
+    except ValueError as exc:
+        print(f"Ошибка: {exc}.")
+        return
+    save_props(props)
+    save_movements(movements)
+    print(f"«{prop.name}» отправлен в ремонт.")
+
+
+def complete_repair_flow(
+    props: list[Prop],
+    movements: list[Movement],
+) -> None:
+    """Диалог возврата предмета из ремонта на склад."""
+    print("\n--- Возврат из ремонта ---")
+    candidates = filter_props(props, status=STATUS_IN_REPAIR)
+    if not candidates:
+        print("Нет предметов в ремонте.")
+        return
+    prop = choose_from_list(candidates, "Какой предмет отремонтирован?")
+    if prop is None:
+        print("Операция отменена.")
+        return
+    condition = choose_from_list(CONDITIONS, "Состояние после ремонта:")
+    if condition is None:
+        condition = prop.condition
+        print(f"Состояние оставлено без изменений: {condition}")
+    try:
+        complete_repair(movements, prop, condition)
+    except ValueError as exc:
+        print(f"Ошибка: {exc}.")
+        return
+    save_props(props)
+    save_movements(movements)
+    print(f"«{prop.name}» принят на склад (состояние: {condition}).")
+
+
+def write_off_flow(
+    props: list[Prop],
+    movements: list[Movement],
+) -> None:
+    """Диалог списания предмета (безвозвратного)."""
+    print("\n--- Списание предмета ---")
+    candidates = [
+        prop
+        for prop in props
+        if prop.status in (STATUS_IN_STOCK, STATUS_IN_REPAIR, STATUS_LOST)
+    ]
+    if not candidates:
+        print("Нет предметов, доступных для списания.")
+        return
+    prop = choose_from_list(candidates, "Какой предмет списать?")
+    if prop is None:
+        print("Операция отменена.")
+        return
+    if not input_yes_no(f"Списать «{prop.name}» безвозвратно? "):
+        print("Операция отменена.")
+        return
+    try:
+        write_off_prop(movements, prop)
+    except ValueError as exc:
+        print(f"Ошибка: {exc}.")
+        return
+    save_props(props)
+    save_movements(movements)
+    print(f"«{prop.name}» списан.")
 
 # --- Справочники: локации и сотрудники ---
 
@@ -541,7 +682,7 @@ def main() -> None:
     productions = load_productions()
     props = load_props(locations)
     movements = load_movements(props, locations, employees)
-    reservations = load_reservations(props, productions)
+    reservations = load_reservations(props, productions, employees)
 
     print("=== THEATER PROPS — учёт театрального реквизита ===")
     print(
@@ -558,24 +699,27 @@ def main() -> None:
         2: lambda: add_prop_flow(props, locations),
         3: lambda: find_props_flow(props),
         4: lambda: issue_prop_flow(
-            props, movements, locations, employees
+            props, movements, locations, employees, reservations
         ),
         5: lambda: return_prop_flow(props, movements, locations),
         6: lambda: show_journal_flow(movements),
         7: lambda: check_availability_flow(props, reservations),
         8: lambda: create_reservation_flow(
-            props, reservations, productions
+            props, reservations, productions, employees
         ),
         9: lambda: cancel_reservation_flow(reservations),
         10: lambda: show_reservations_flow(reservations),
         11: lambda: show_productions_flow(productions),
         12: lambda: add_production_flow(productions),
-        13: lambda: run_inventory_flow(props, locations),
+        13: lambda: run_inventory_flow(props, locations, movements),
         14: lambda: show_stats_flow(props),
-        15: lambda: show_locations(locations),
-        16: lambda: add_location_flow(locations),
-        17: lambda: show_employees(employees),
-        18: lambda: add_employee_flow(employees),
+        15: lambda: send_to_repair_flow(props, movements),
+        16: lambda: complete_repair_flow(props, movements),
+        17: lambda: write_off_flow(props, movements),
+        18: lambda: show_locations(locations),
+        19: lambda: add_location_flow(locations),
+        20: lambda: show_employees(employees),
+        21: lambda: add_employee_flow(employees),
     }
 
     while True:
@@ -599,11 +743,14 @@ def main() -> None:
         print("УЧЁТ")
         print("13. Инвентаризация")
         print("14. Статистика")
+        print("15. Отправить в ремонт")
+        print("16. Вернуть из ремонта")
+        print("17. Списать предмет")
         print("СПРАВОЧНИКИ")
-        print("15. Локации: список")
-        print("16. Локации: добавить")
-        print("17. Сотрудники: список")
-        print("18. Сотрудники: добавить")
+        print("18. Локации: список")
+        print("19. Локации: добавить")
+        print("20. Сотрудники: список")
+        print("21. Сотрудники: добавить")
         print(" 0. Выход")
         choice = input_int("Ваш выбор: ")
         if choice == 0:

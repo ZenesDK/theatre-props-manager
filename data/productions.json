@@ -22,5 +22,11 @@
     "title": "«Борис Годунов»",
     "director": null,
     "premiere_date": "2026-11-15"
+  },
+  {
+    "id": 5,
+    "title": "0",
+    "director": null,
+    "premiere_date": null
   }
 ]

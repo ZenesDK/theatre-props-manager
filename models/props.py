@@ -2,8 +2,15 @@
 
 Предмет реквизита — объект класса Prop. Локация хранится
 ссылкой на объект Location. Статус предмета меняется только
-через методы mark_issued(), mark_returned() и mark_lost():
-объект сам охраняет допустимые переходы состояний.
+через методы mark_issued(), mark_returned(), mark_lost(),
+mark_in_repair(), mark_repaired() и write_off(): объект сам
+охраняет допустимые переходы состояний.
+
+Допустимые переходы:
+    на складе -> выдан | в ремонте | утерян | списан
+    выдан -> на складе
+    в ремонте -> на складе | списан
+    утерян -> списан
 """
 
 from datetime import datetime
@@ -78,12 +85,22 @@ class Prop:
     def from_data(cls, data: dict, locations: list[Location]) -> "Prop":
         """Создать предмет из данных JSON.
 
-        Локация восстанавливается по идентификатору из коллекции.
+        Локация восстанавливается по идентификатору из
+        коллекции; location_id = None означает «не указана».
 
         Raises:
-            ValueError: если статус предмета неизвестен.
+            ValueError: если статус предмета неизвестен или
+                локация по идентификатору не найдена
+                (повреждённые данные).
         """
-        location = find_by_id(locations, data["location_id"])
+        location_id = data.get("location_id")
+        location = (
+            find_by_id(locations, location_id)
+            if location_id is not None
+            else None
+        )
+        if location_id is not None and location is None:
+            raise ValueError(f"Локация {location_id} не найдена")
         if not cls.validate_status(data["status"]):
             raise ValueError(f"Неизвестный статус: {data['status']}")
         return cls(
@@ -157,6 +174,56 @@ class Prop:
     def mark_lost(self) -> None:
         """Пометить предмет утерянным."""
         self.status = STATUS_LOST
+
+    def mark_in_repair(self) -> None:
+        """Направить предмет в ремонт.
+
+        Ремонт возможен только для предмета на складе:
+        выданный предмет сначала нужно принять обратно.
+
+        Raises:
+            ValueError: если предмет не находится на складе.
+        """
+        if self.status != STATUS_IN_STOCK:
+            raise ValueError(
+                f"Предмет «{self.name}» нельзя направить в ремонт "
+                f"(текущий статус: {self.status})"
+            )
+        self.status = STATUS_IN_REPAIR
+
+    def mark_repaired(self, condition: str) -> None:
+        """Вернуть предмет из ремонта на склад.
+
+        Состояние предмета переоценивается по итогам ремонта.
+
+        Raises:
+            ValueError: если предмет не находится в ремонте.
+        """
+        if self.status != STATUS_IN_REPAIR:
+            raise ValueError(
+                f"Предмет «{self.name}» не в ремонте "
+                f"(текущий статус: {self.status})"
+            )
+        self.status = STATUS_IN_STOCK
+        self.condition = condition
+
+    def write_off(self) -> None:
+        """Списать предмет: вывести из эксплуатации навсегда.
+
+        Списывать выданный предмет нельзя: сначала его нужно
+        принять обратно на склад. Списанный предмет остаётся
+        в каталоге, но исключается из оборота и сверок.
+
+        Raises:
+            ValueError: если предмет выдан или уже списан.
+        """
+        if self.status == STATUS_ISSUED:
+            raise ValueError(
+                f"Предмет «{self.name}» нельзя списать, пока он выдан"
+            )
+        if self.status == STATUS_WRITTEN_OFF:
+            raise ValueError(f"Предмет «{self.name}» уже списан")
+        self.status = STATUS_WRITTEN_OFF
 
     def __str__(self) -> str:
         """Вернуть строковое представление предмета."""

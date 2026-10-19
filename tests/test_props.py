@@ -6,9 +6,11 @@ import pytest
 
 from models.locations import Location
 from models.props import (
+    STATUS_IN_REPAIR,
     STATUS_IN_STOCK,
     STATUS_ISSUED,
     STATUS_LOST,
+    STATUS_WRITTEN_OFF,
     Prop,
     add_prop,
     filter_props,
@@ -133,10 +135,65 @@ def test_mark_lost():
     assert prop.status == STATUS_LOST
 
 
+def test_mark_in_repair_from_stock():
+    prop = make_prop(1, STATUS_IN_STOCK)
+    prop.mark_in_repair()
+    assert prop.status == STATUS_IN_REPAIR
+
+
+def test_mark_in_repair_not_in_stock_raises():
+    prop = make_prop(1, STATUS_ISSUED)
+    with pytest.raises(ValueError):
+        prop.mark_in_repair()
+
+
+def test_mark_repaired_returns_to_stock():
+    prop = make_prop(1, STATUS_IN_REPAIR)
+    prop.mark_repaired("хорошее")
+    assert prop.status == STATUS_IN_STOCK
+    assert prop.condition == "хорошее"
+
+
+def test_mark_repaired_wrong_status_raises():
+    prop = make_prop(1, STATUS_IN_STOCK)
+    with pytest.raises(ValueError):
+        prop.mark_repaired("новое")
+
+
+def test_write_off_from_stock():
+    prop = make_prop(1, STATUS_IN_STOCK)
+    prop.write_off()
+    assert prop.status == STATUS_WRITTEN_OFF
+
+
+def test_write_off_from_repair_and_lost():
+    from_repair = make_prop(1, STATUS_IN_REPAIR)
+    from_repair.write_off()
+    assert from_repair.status == STATUS_WRITTEN_OFF
+    from_lost = make_prop(2, STATUS_LOST)
+    from_lost.write_off()
+    assert from_lost.status == STATUS_WRITTEN_OFF
+
+
+def test_write_off_issued_raises():
+    prop = make_prop(1, STATUS_ISSUED)
+    with pytest.raises(ValueError):
+        prop.write_off()
+
+
+def test_write_off_twice_raises():
+    prop = make_prop(1, STATUS_IN_STOCK)
+    prop.write_off()
+    with pytest.raises(ValueError):
+        prop.write_off()
+
+
 def test_is_bookable():
     assert make_prop(1, STATUS_IN_STOCK).is_bookable()
     assert make_prop(2, STATUS_ISSUED).is_bookable()
-    assert not make_prop(3, STATUS_LOST).is_bookable()
+    assert make_prop(3, STATUS_IN_REPAIR).is_bookable()
+    assert not make_prop(4, STATUS_LOST).is_bookable()
+    assert not make_prop(5, STATUS_WRITTEN_OFF).is_bookable()
 
 
 def test_needs_repair():

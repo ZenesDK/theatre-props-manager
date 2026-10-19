@@ -31,22 +31,26 @@
 
 | Класс | Атрибуты | Методы |
 |---|---|---|
-| **Prop** — предмет | id, inventory_number, name, category, condition, status, location (ссылка на Location), created_at | `mark_issued()`, `mark_returned()`, `mark_lost()`, `is_bookable()`, `needs_repair()`, `matches()`, `from_data()`, `to_data()`, `__str__()` |
+| **Prop** — предмет | id, inventory_number, name, category, condition, status, location (ссылка на Location), created_at | `mark_issued()`, `mark_returned()`, `mark_lost()`, `mark_in_repair()`, `mark_repaired()`, `write_off()`, `is_bookable()`, `needs_repair()`, `matches()`, `from_data()`, `to_data()`, `__str__()` |
 | **Location** — локация | id, name | `from_data()`, `to_data()`, `__str__()` |
 | **Employee** — сотрудник | id, full_name, position | `from_data()`, `to_data()`, `__str__()` |
 | **Production** — постановка | id, title, director, premiere_date | `from_data()`, `to_data()`, `__str__()` |
-| **Movement** — перемещение | id, prop, movement_type, location, employee, purpose, moved_at | `from_data()`, `to_data()`, `__str__()` |
-| **Reservation** — бронирование | id, prop, date, production, reserved_at, is_cancelled | `cancel()`, `from_data()`, `to_data()`, `__str__()` |
+| **Movement** — запись журнала | id, prop, movement_type, location, employee, purpose, moved_at | `from_data()`, `to_data()`, `__str__()` |
+| **Reservation** — бронирование | id, prop, date, production, reserved_at, is_cancelled, reserved_by (сотрудник, оформивший бронь) | `cancel()`, `from_data()`, `to_data()`, `__str__()` |
 
 Ключевые принципы модели:
 
 * **Статус предмета меняют только его методы** `mark_issued()`,
-  `mark_returned()`, `mark_lost()`: объект сам охраняет
+  `mark_returned()`, `mark_lost()`, `mark_in_repair()`,
+  `mark_repaired()`, `write_off()`: объект сам охраняет
   допустимые переходы состояний (выдать не со склада нельзя —
-  `ValueError`).
+  `ValueError`; списать выданный — тоже). Полная схема
+  переходов — в docstring модуля `models/props.py`.
 * **Отмена брони — состояние, а не удаление**: `cancel()`
   устанавливает `is_cancelled`; запись остаётся в коллекции
   (история бронирований) и перестаёт блокировать предмет.
+* **Бронь помнит оформителя**: `reserved_by` — сотрудник,
+  который оформил бронирование; поле необязательное.
 * **`@classmethod` `from_data()`** у всех классов — восстановление
   объекта из JSON; **`@staticmethod` `Prop.validate_status()`** —
   проверка значения без данных объекта.
@@ -54,9 +58,10 @@
 ## Взаимодействие объектов
 
 * `Movement` хранит ссылки на `Prop`, `Location`, `Employee`;
-  `Reservation` — на `Prop` и `Production`; `Prop` — на
-  `Location`. Данные связанных объектов доступны напрямую:
-  `movement.prop.name`, `reservation.production.title`.
+  `Reservation` — на `Prop`, `Production` и `Employee`
+  (оформитель); `Prop` — на `Location`. Данные связанных
+  объектов доступны напрямую: `movement.prop.name`,
+  `reservation.production.title`, `reservation.reserved_by.full_name`.
 * В JSON связи хранятся идентификаторами (`prop_id`,
   `production_id`); преобразование объект ↔ данные выполняется
   методами `from_data()` / `to_data()` в модуле storage.
@@ -74,11 +79,17 @@
   уникальности инвентарного номера; фильтры по категории
   и статусу; поиск по подстроке; сортировка.
 * **Перемещения:** выдача реквизита сотруднику; возврат
-  с фиксацией состояния; журнал перемещений.
+  с фиксацией состояния; журнал событий (выдача, возврат,
+  утеря, списание, в ремонт, из ремонта).
 * **Бронирование:** проверка доступности на дату; создание
-  и отмена броней; отменённые записи сохраняются в истории.
+  и отмена броней; фиксация оформителя брони; предупреждение
+  о бронях при выдаче предмета; отменённые записи
+  сохраняются в истории.
+* **Ремонт и списание:** отправка предмета в ремонт
+  (только со склада), возврат из ремонта с переоценкой
+  состояния, безвозвратное списание с подтверждением.
 * **Инвентаризация:** сверка наличия по локации; отметка
-  утерянных; отчёт в JSON.
+  утерянных с записью в журнал; отчёт в JSON.
 * **Статистика:** распределения по статусам, категориям
   и локациям.
 * **Репертуар и справочники:** постановки, локации, сотрудники.
@@ -104,7 +115,7 @@
 | requirements.txt | pytest, flake8 |
 | data/ | JSON-данные приложения |
 | reports/ | Отчёты инвентаризаций (gitignored) |
-| tests/ | Автоматические тесты pytest (92 теста) |
+| tests/ | Автоматические тесты pytest (126 тестов) |
 
 ## Формат хранения данных
 
@@ -112,10 +123,13 @@
 `props.json`, `locations.json`, `employees.json`,
 `movements.json`, `reservations.json`, `productions.json`.
 Записи содержат идентификаторы связанных объектов (`prop_id`,
-`location_id` и т.д.); даты — в ISO-формате; у бронирований
-хранится состояние `is_cancelled`. При запуске записи
-преобразуются в объекты с восстановлением ссылок, при
-сохранении — обратно.
+`location_id`, `reserved_by_id` и т.д.); даты — в ISO-формате;
+у бронирований хранятся состояние `is_cancelled` и оформитель
+`reserved_by_id`. Журнал перемещений ведёт события шести типов:
+выдача, возврат, утеря, списание, в ремонт, из ремонта.
+При запуске записи преобразуются в объекты с восстановлением
+ссылок; битая ссылка или пропущенное поле прерывают запуск
+с понятным сообщением.
 
 ## Требования
 

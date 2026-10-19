@@ -1,10 +1,15 @@
-"""Перемещения реквизита: класс Movement и функции выдачи/возврата.
+"""Журнал событий реквизита: класс Movement и функции операций.
 
 Запись журнала хранит ссылки на объекты Prop, Location
-и Employee (для возврата сотрудник не указывается — None).
+и Employee (сотрудник указывается только при выдаче).
+Типы событий: выдача, возврат, утеря, списание,
+в ремонт, из ремонта. Локация может отсутствовать
+(None), если на момент события она неизвестна.
+
 Сами изменения состояния предмета выполняют его методы
-mark_issued() и mark_returned(); функции модуля лишь
-создают запись журнала и добавляют её в коллекцию.
+(mark_issued(), mark_returned(), mark_lost() и т.д.);
+функции модуля лишь создают запись журнала и добавляют
+её в коллекцию.
 """
 
 from datetime import datetime
@@ -16,17 +21,21 @@ from utils import find_by_id, next_id
 
 MOVEMENT_ISSUE = "выдача"
 MOVEMENT_RETURN = "возврат"
+MOVEMENT_LOSS = "утеря"
+MOVEMENT_WRITE_OFF = "списание"
+MOVEMENT_REPAIR = "в ремонт"
+MOVEMENT_REPAIRED = "из ремонта"
 
 
 class Movement:
-    """Запись о выдаче или возврате предмета реквизита."""
+    """Запись журнала: событие с предметом реквизита."""
 
     def __init__(
         self,
         movement_id: int,
         prop: Prop,
         movement_type: str,
-        location: Location,
+        location: Location | None,
         employee: Employee | None,
         purpose: str,
         moved_at: datetime,
@@ -60,9 +69,14 @@ class Movement:
         prop = find_by_id(props, data["prop_id"])
         if prop is None:
             raise ValueError(f"Предмет {data['prop_id']} не найден")
-        location = find_by_id(locations, data["location_id"])
-        if location is None:
-            raise ValueError(f"Локация {data['location_id']} не найдена")
+        location_id = data.get("location_id")
+        location = (
+            find_by_id(locations, location_id)
+            if location_id is not None
+            else None
+        )
+        if location_id is not None and location is None:
+            raise ValueError(f"Локация {location_id} не найдена")
         employee_id = data.get("employee_id")
         employee = (
             find_by_id(employees, employee_id)
@@ -85,7 +99,7 @@ class Movement:
             "id": self.id,
             "prop_id": self.prop.id,
             "movement_type": self.movement_type,
-            "location_id": self.location.id,
+            "location_id": self.location.id if self.location else None,
             "employee_id": self.employee.id if self.employee else None,
             "purpose": self.purpose,
             "moved_at": self.moved_at.isoformat(timespec="seconds"),
@@ -96,13 +110,41 @@ class Movement:
         prop_label = f"[{self.prop.inventory_number}] {self.prop.name}"
         if self.movement_type == MOVEMENT_ISSUE:
             arrow = "→"
-        else:
+        elif self.movement_type in (MOVEMENT_RETURN, MOVEMENT_REPAIRED):
             arrow = "←"
+        else:
+            arrow = "×"
+        label = ""
+        if self.movement_type not in (MOVEMENT_ISSUE, MOVEMENT_RETURN):
+            label = f" {self.movement_type}:"
+        location_name = self.location.name if self.location else "—"
         employee_name = str(self.employee) if self.employee else "—"
         return (
-            f"{self.moved_at:%d.%m.%Y %H:%M} {arrow} {prop_label} | "
-            f"{self.location.name} | {employee_name} | {self.purpose}"
+            f"{self.moved_at:%d.%m.%Y %H:%M} {arrow}{label} {prop_label} | "
+            f"{location_name} | {employee_name} | {self.purpose}"
         )
+
+
+def _new_movement(
+    movements: list[Movement],
+    prop: Prop,
+    movement_type: str,
+    location: Location | None,
+    employee: Employee | None,
+    purpose: str,
+) -> Movement:
+    """Создать запись со следующим id и добавить в журнал."""
+    movement = Movement(
+        movement_id=next_id(movements),
+        prop=prop,
+        movement_type=movement_type,
+        location=location,
+        employee=employee,
+        purpose=purpose,
+        moved_at=datetime.now(),
+    )
+    movements.append(movement)
+    return movement
 
 
 def issue_prop(
@@ -122,17 +164,9 @@ def issue_prop(
         ValueError: если предмет не находится на складе.
     """
     prop.mark_issued(location)
-    movement = Movement(
-        movement_id=next_id(movements),
-        prop=prop,
-        movement_type=MOVEMENT_ISSUE,
-        location=location,
-        employee=employee,
-        purpose=purpose,
-        moved_at=datetime.now(),
+    return _new_movement(
+        movements, prop, MOVEMENT_ISSUE, location, employee, purpose
     )
-    movements.append(movement)
-    return movement
 
 
 def return_prop(
@@ -147,14 +181,96 @@ def return_prop(
         ValueError: если предмет не выдан.
     """
     prop.mark_returned(location, condition)
-    movement = Movement(
-        movement_id=next_id(movements),
-        prop=prop,
-        movement_type=MOVEMENT_RETURN,
-        location=location,
-        employee=None,
-        purpose="возврат на хранение",
-        moved_at=datetime.now(),
+    return _new_movement(
+        movements,
+        prop,
+        MOVEMENT_RETURN,
+        location,
+        None,
+        "возврат на хранение",
     )
-    movements.append(movement)
-    return movement
+
+
+def record_loss(
+    movements: list[Movement],
+    prop: Prop,
+    purpose: str = "не найден при инвентаризации",
+) -> Movement:
+    """Пометить предмет утерянным и добавить запись в журнал.
+
+    Локация в записи — где предмет числился на момент утери.
+    """
+    prop.mark_lost()
+    return _new_movement(
+        movements,
+        prop,
+        MOVEMENT_LOSS,
+        prop.location,
+        None,
+        purpose,
+    )
+
+
+def send_to_repair(
+    movements: list[Movement],
+    prop: Prop,
+    purpose: str = "направлен в ремонт",
+) -> Movement:
+    """Отправить предмет в ремонт и добавить запись в журнал.
+
+    Raises:
+        ValueError: если предмет не находится на складе.
+    """
+    prop.mark_in_repair()
+    return _new_movement(
+        movements,
+        prop,
+        MOVEMENT_REPAIR,
+        prop.location,
+        None,
+        purpose,
+    )
+
+
+def complete_repair(
+    movements: list[Movement],
+    prop: Prop,
+    condition: str,
+) -> Movement:
+    """Вернуть предмет из ремонта на склад.
+
+    Состояние предмета переоценивается по итогам ремонта.
+
+    Raises:
+        ValueError: если предмет не находится в ремонте.
+    """
+    prop.mark_repaired(condition)
+    return _new_movement(
+        movements,
+        prop,
+        MOVEMENT_REPAIRED,
+        prop.location,
+        None,
+        "возврат из ремонта",
+    )
+
+
+def write_off_prop(
+    movements: list[Movement],
+    prop: Prop,
+    purpose: str = "предмет списан",
+) -> Movement:
+    """Списать предмет и добавить запись в журнал.
+
+    Raises:
+        ValueError: если предмет выдан или уже списан.
+    """
+    prop.write_off()
+    return _new_movement(
+        movements,
+        prop,
+        MOVEMENT_WRITE_OFF,
+        prop.location,
+        None,
+        purpose,
+    )

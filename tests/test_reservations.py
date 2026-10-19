@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 
+from models.employees import Employee
 from models.locations import Location
 from models.productions import Production
 from models.props import STATUS_LOST, Prop
@@ -10,6 +11,7 @@ from models.reservations import (
     cancel_reservation,
     create_reservation,
     find_reservation,
+    find_upcoming_reservation,
     get_reservation_status,
     is_prop_available,
 )
@@ -66,6 +68,14 @@ def make_reservation(
     )
 
 
+def make_employees() -> list[Employee]:
+    """Сотрудники: реквизитор и зав. складом."""
+    return [
+        Employee(1, "Иванова Анна Петровна", "реквизитор"),
+        Employee(2, "Смирнов Олег Васильевич", "зав. складом"),
+    ]
+
+
 def test_reservation_str_active():
     prop = make_prop(1, "на складе")
     production = Production(1, "«Онегин»", None, None)
@@ -103,17 +113,19 @@ def test_reservation_to_data():
 def test_reservation_data_roundtrip():
     props = make_props()
     productions = make_productions()
+    employees = make_employees()
     reservation = make_reservation(
         3, props[1], productions[1], date(2026, 11, 1)
     )
     restored = Reservation.from_data(
-        reservation.to_data(), props, productions
+        reservation.to_data(), props, productions, employees
     )
     assert restored.id == 3
     assert restored.prop is props[1]
     assert restored.production is productions[1]
     assert restored.date == date(2026, 11, 1)
     assert restored.is_cancelled is False
+    assert restored.reserved_by is None
 
 
 def test_reservation_cancel_changes_state():
@@ -236,3 +248,128 @@ def test_get_reservation_status_texts():
     busy_text = get_reservation_status(False)
     assert available_text == "Предмет доступен для бронирования"
     assert busy_text == "Предмет уже занят"
+
+
+def test_reservation_str_with_reserved_by():
+    prop = make_prop(1, "на складе")
+    production = Production(1, "«Онегин»", None, None)
+    reservation = make_reservation(1, prop, production, date(2026, 10, 5))
+    reservation.reserved_by = make_employees()[1]
+    assert str(reservation) == (
+        "[1] 05.10.2026 — Предмет №1 — «Онегин» "
+        "(активно, оформил: Смирнов Олег Васильевич)"
+    )
+
+
+def test_reservation_reserved_by_roundtrip():
+    props = make_props()
+    productions = make_productions()
+    employees = make_employees()
+    reservation = make_reservation(
+        1, props[0], productions[0], date(2026, 10, 5)
+    )
+    reservation.reserved_by = employees[0]
+    data = reservation.to_data()
+    assert data["reserved_by_id"] == 1
+    restored = Reservation.from_data(
+        data, props, productions, employees
+    )
+    assert restored.reserved_by is employees[0]
+
+
+def test_reservation_without_reserved_by_stores_none():
+    props = make_props()
+    productions = make_productions()
+    employees = make_employees()
+    reservation = make_reservation(
+        1, props[0], productions[0], date(2026, 10, 5)
+    )
+    data = reservation.to_data()
+    assert data["reserved_by_id"] is None
+    restored = Reservation.from_data(
+        data, props, productions, employees
+    )
+    assert restored.reserved_by is None
+
+
+def test_reservation_from_data_missing_employee_stores_none():
+    props = make_props()
+    productions = make_productions()
+    reservation = make_reservation(
+        1, props[0], productions[0], date(2026, 10, 5)
+    )
+    data = reservation.to_data()
+    data["reserved_by_id"] = 99
+    restored = Reservation.from_data(data, props, productions, [])
+    assert restored.reserved_by is None
+
+
+def test_create_reservation_stores_reserved_by():
+    props = make_props()
+    productions = make_productions()
+    employees = make_employees()
+    reservations: list[Reservation] = []
+    reservation = create_reservation(
+        reservations,
+        props[0],
+        date(2026, 10, 5),
+        productions[0],
+        employees[0],
+    )
+    assert reservation is not None
+    assert reservation.reserved_by is employees[0]
+
+
+def test_find_upcoming_reservation_returns_nearest():
+    props = make_props()
+    productions = make_productions()
+    reservations: list[Reservation] = []
+    create_reservation(
+        reservations, props[0], date(2026, 10, 7), productions[0]
+    )
+    create_reservation(
+        reservations, props[0], date(2026, 10, 5), productions[1]
+    )
+    upcoming = find_upcoming_reservation(
+        reservations, props[0], date(2026, 10, 1)
+    )
+    assert upcoming is not None
+    assert upcoming.date == date(2026, 10, 5)
+
+
+def test_find_upcoming_reservation_includes_today():
+    props = make_props()
+    productions = make_productions()
+    reservations: list[Reservation] = []
+    create_reservation(
+        reservations, props[0], date(2026, 10, 5), productions[0]
+    )
+    upcoming = find_upcoming_reservation(
+        reservations, props[0], date(2026, 10, 5)
+    )
+    assert upcoming is not None
+
+
+def test_find_upcoming_reservation_ignores_past():
+    props = make_props()
+    productions = make_productions()
+    reservations: list[Reservation] = []
+    create_reservation(
+        reservations, props[0], date(2026, 9, 1), productions[0]
+    )
+    upcoming = find_upcoming_reservation(
+        reservations, props[0], date(2026, 10, 1)
+    )
+    assert upcoming is None
+
+
+def test_find_upcoming_reservation_ignores_cancelled():
+    props = make_props()
+    production = Production(1, "«Онегин»", None, None)
+    reservation = make_reservation(
+        1, props[0], production, date(2026, 10, 5), is_cancelled=True
+    )
+    upcoming = find_upcoming_reservation(
+        [reservation], props[0], date(2026, 10, 1)
+    )
+    assert upcoming is None
