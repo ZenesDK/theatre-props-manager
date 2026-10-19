@@ -1,0 +1,9 @@
+{# Общая навигация сайта: подключается в base.html. #}
+{# Ссылки формируются именованными маршрутами Django. #}
+<nav class="nav bg-light border-bottom px-3">
+    <a class="nav-link" href="{% url 'homepage:index' %}">Главная</a>
+    <a class="nav-link" href="{% url 'props:props' %}">Реквизит</a>
+    <a class="nav-link" href="{% url 'reservations:reservations' %}">
+        Брони
+    </a>
+</nav>

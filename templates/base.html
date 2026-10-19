@@ -11,11 +11,7 @@
     >
 </head>
 <body>
-    <nav class="nav bg-light border-bottom px-3">
-        <a class="nav-link" href="/">Главная</a>
-        <a class="nav-link" href="/props/">Реквизит</a>
-        <a class="nav-link" href="/reservations/">Брони</a>
-    </nav>
+    {% include "includes/navigation.html" %}
 
     <main class="container py-4">
         {% block content %}

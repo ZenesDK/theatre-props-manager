@@ -16,6 +16,11 @@
     версия приложения (ПР3) дополнена веб-интерфейсом (ПР5).
 </p>
 <p>Основные разделы:</p>
-<a href="/props/" class="btn btn-primary me-2">Реквизит</a>
-<a href="/reservations/" class="btn btn-secondary">Брони</a>
+<a href="{% url 'props:props' %}" class="btn btn-primary me-2">
+    Реквизит
+</a>
+<a href="{% url 'reservations:reservations' %}"
+   class="btn btn-secondary">
+    Брони
+</a>
 {% endblock %}
