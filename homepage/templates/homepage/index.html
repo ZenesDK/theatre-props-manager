@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}
+Главная – TheaterProps
+{% endblock %}
+
+{% block content %}
+<h1 class="display-4">TheaterProps</h1>
+
+<p class="lead">
+    Учёт театрального реквизита.
+</p>
+<p>
+    Каталогизация реквизита, выдача и возврат, бронирование
+    под постановки, инвентаризация и статистика. Консольная
+    версия приложения (ПР3) дополнена веб-интерфейсом (ПР5).
+</p>
+<p>Основные разделы:</p>
+<a href="/props/" class="btn btn-primary me-2">Реквизит</a>
+<a href="/reservations/" class="btn btn-secondary">Брони</a>
+{% endblock %}

@@ -1,12 +1,13 @@
-"""Общий каркас страниц и главная страница проекта.
+"""Общие представления проекта: главная страница и страница 404.
 
-Функция page() собирает HTML-документ: кодировка, заголовок
-вкладки, подключение Bootstrap 5.3 через CDN и навигация.
-Остальные приложения импортируют page(), поэтому каркас
-задаётся в одном месте — точке входа проекта.
+Главная страница и страница 404 переведены на шаблоны Django
+(homepage/index.html и 404.html). Функция page() из ПР5 пока
+сохранена: её импортируют представления props и reservations,
+она будет удалена после полного перехода проекта на render().
 """
 
 from django.http import HttpResponse
+from django.shortcuts import render
 
 BOOTSTRAP = (
     "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3"
@@ -37,27 +38,9 @@ def page(title: str, content: str) -> str:
 
 def index(request):
     """Главная страница: описание приложения и навигация."""
-    content = """
-<h1 class="display-4">TheaterProps</h1>
-<p class="lead">Учёт театрального реквизита.</p>
-<p>Каталогизация реквизита, выдача и возврат, бронирование
-под постановки, инвентаризация и статистика. Консольная
-версия приложения (ПР3) дополнена веб-интерфейсом (ПР5).</p>
-<p>Основные разделы:</p>
-<a href="/props/" class="btn btn-primary me-2">Реквизит</a>
-<a href="/reservations/" class="btn btn-secondary">Брони</a>
-"""
-    return HttpResponse(page("TheaterProps", content))
+    return render(request, "homepage/index.html")
 
 
 def page_not_found(request, exception):
     """Собственная страница 404 (handler404 в urls.py)."""
-    content = """
-<h1 class="text-danger">404 — страница не найдена</h1>
-<p>Проверьте адрес или вернитесь на главную.</p>
-<a href="/" class="btn btn-primary">На главную</a>
-"""
-    return HttpResponse(
-        page("404 — страница не найдена", content),
-        status=404,
-    )
+    return render(request, "404.html", status=404)
