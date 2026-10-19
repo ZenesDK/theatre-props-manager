@@ -11,3 +11,5 @@ inventory_*.json
 *.odt
 *.odt#
 flake8_report.txt
+*.patch
+*.docx
