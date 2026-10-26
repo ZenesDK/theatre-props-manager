@@ -6,8 +6,11 @@ View-функции подготавливают контекст и вызыв�
 постановкой и оформителем. HTML во view не формируется.
 """
 
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
+from models.props import Prop
+from models.reservations import Reservation
 from storage import (
     load_employees,
     load_locations,
@@ -18,7 +21,7 @@ from storage import (
 from utils import find_by_id
 
 
-def load_domain_data():
+def load_domain_data() -> tuple[list[Reservation], list[Prop]]:
     """Загрузить коллекции предметной области средствами ПР3."""
     locations = load_locations()
     props_list = load_props(locations)
@@ -30,7 +33,7 @@ def load_domain_data():
     return reservations, props_list
 
 
-def reservations(request):
+def reservations(request: HttpRequest) -> HttpResponse:
     """Список бронирований из data/reservations.json."""
     reservations_list, _ = load_domain_data()
     context = {
@@ -43,7 +46,10 @@ def reservations(request):
     )
 
 
-def reservation_detail(request, reservation_id):
+def reservation_detail(
+    request: HttpRequest,
+    reservation_id: int,
+) -> HttpResponse:
     """Карточка брони; 404, если бронирование не найдено."""
     reservations_list, _ = load_domain_data()
     reservation = find_by_id(reservations_list, reservation_id)
