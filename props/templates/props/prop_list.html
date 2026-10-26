@@ -8,6 +8,13 @@
 <h1>Реквизит</h1>
 <p class="text-muted">Всего предметов: {{ props|length }}</p>
 
+<p>
+    <a href="{% url 'props:available' %}"
+       class="btn btn-outline-primary btn-sm">
+        Найти свободный предмет на дату
+    </a>
+</p>
+
 {% for prop in props %}
     {% include "props/includes/prop_card.html" %}
 {% empty %}
