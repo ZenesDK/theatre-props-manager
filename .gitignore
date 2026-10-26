@@ -10,6 +10,6 @@ inventory_*.json
 .vscode/
 *.odt
 *.odt#
-flake8_report.txt
-*.patch
+*.sqlite
+flake8_report.txt*.patch
 *.docx
