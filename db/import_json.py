@@ -4,6 +4,11 @@
 в таблицы базы методом executemany(). Значения передаются
 параметрами ?, SQL-текст не собирается из строк.
 
+Перед импортом скрипт сам применяет схему из sql/schema.sql
+(CREATE TABLE IF NOT EXISTS) и очищает таблицы, поэтому
+запуск работает и на пустой базе, и повторно: данные
+каждый раз приводятся к состоянию JSON-файлов.
+
 Порядок импорта соответствует внешним ключам: сначала
 справочники (локации, постановки, сотрудники), затем
 предметы, брони и журнал перемещений.
@@ -17,6 +22,8 @@ import sqlite3
 
 from db.database import get_connection
 
+SCHEMA_FILE = "sql/schema.sql"
+
 LOCATIONS_FILE = "data/locations.json"
 PRODUCTIONS_FILE = "data/productions.json"
 EMPLOYEES_FILE = "data/employees.json"
@@ -29,6 +36,26 @@ def load_json(filename: str) -> list:
     """Загрузить список записей из JSON-файла."""
     with open(filename, encoding="utf-8") as file:
         return json.load(file)
+
+
+def apply_schema(conn: sqlite3.Connection) -> None:
+    """Создать таблицы по sql/schema.sql, если их ещё нет."""
+    with open(SCHEMA_FILE, encoding="utf-8") as file:
+        conn.executescript(file.read())
+
+
+def clear_tables(conn: sqlite3.Connection) -> None:
+    """Удалить старые данные перед повторным импортом.
+
+    Порядок очистки — от дочерних таблиц к справочникам,
+    чтобы не нарушить внешние ключи (PRAGMA foreign_keys = ON).
+    """
+    conn.execute("DELETE FROM movements")
+    conn.execute("DELETE FROM reservations")
+    conn.execute("DELETE FROM props")
+    conn.execute("DELETE FROM employees")
+    conn.execute("DELETE FROM productions")
+    conn.execute("DELETE FROM locations")
 
 
 def import_locations(conn: sqlite3.Connection) -> None:
@@ -183,9 +210,11 @@ def import_movements(conn: sqlite3.Connection) -> None:
 
 
 def main() -> None:
-    """Импортировать все JSON-файлы в базу данных."""
+    """Подготовить базу и импортировать все JSON-файлы."""
     conn = get_connection()
     try:
+        apply_schema(conn)
+        clear_tables(conn)
         import_locations(conn)
         import_productions(conn)
         import_employees(conn)

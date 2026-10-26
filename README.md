@@ -215,16 +215,20 @@ SQLite `data/theatre_props.sqlite`, SQL-схема, скрипт
 | `sql/schema.sql` | CREATE TABLE IF NOT EXISTS всех шести таблиц; повторный запуск безопасен |
 | `sql/queries.sql` | 14 проверенных SQL-запросов с комментариями |
 | `db/database.py` | `get_connection()`: соединение sqlite3 + `PRAGMA foreign_keys = ON` |
-| `db/import_json.py` | перенос данных из data/*.json в таблицы: `executemany()`, параметры `?`, commit/rollback; запуск `python -m db.import_json` |
+| `db/import_json.py` | перенос данных из data/*.json в таблицы: применяет sql/schema.sql, `executemany()`, параметры `?`, commit/rollback; запуск `python -m db.import_json` |
 
 Файл базы не коммитится (добавлен в .gitignore): база
-создаётся и заполняется скриптами. Для пересоздания:
+создаётся и заполняется одной командой — скрипт импорта
+сам применяет схему и переносит данные:
 
 ```
-python -c "import sqlite3; sqlite3.connect('data/theatre_props.sqlite').close()"
-python -c "import sqlite3; conn = sqlite3.connect('data/theatre_props.sqlite'); conn.executescript(open('sql/schema.sql', encoding='utf-8').read()); conn.commit(); conn.close()"
 python -m db.import_json
 ```
+
+Повторный запуск безопасен: перед импортом таблицы
+очищаются (от дочерних к справочникам — внешние ключи
+не нарушаются), а CREATE TABLE IF NOT EXISTS в
+sql/schema.sql пропускает уже существующие таблицы.
 
 ### SQL-запросы проекта
 
@@ -300,8 +304,8 @@ ORDER BY и LIMIT — последние записи журнала.
 с восстановлением ссылок; битая ссылка или пропущенное поле
 прерывают запуск с понятным сообщением. После изменений
 JSON-данных перенос в базу повторяется скриптом
-`python -m db.import_json` (предварительно очистив таблицы
-либо пересоздав базу по sql/schema.sql).
+`python -m db.import_json` — скрипт сам очищает таблицы
+и применяет схему, повторный запуск безопасен.
 
 ## Требования
 
