@@ -1,16 +1,21 @@
-"""Страницы реквизита: список предметов и карточка.
+"""Страницы реквизита: список, карточка, поиск, журнал.
 
-View-функции подготавливают контекст и вызывают шаблоны Django;
-данные загружаются средствами ПР3: load_props(),
-load_reservations() и функции предметного модуля, не дублируя
-логику консольного приложения. HTML во view не формируется.
+Начиная с ПР7 список предметов, поиск свободных предметов
+и журнал перемещений получают данные из базы SQLite
+(см. sql/queries.sql) средствами модуля sqlite3: соединение
+с row_factory = sqlite3.Row позволяет обращаться к полям
+результата по именам прямо в шаблоне. Карточка предмета
+продолжает работать на данных ПР3: JSON-хранилище сохранено
+как предыдущая реализация предметной области.
 """
 
+import sqlite3
 from datetime import date
 
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
+from db.database import get_connection
 from models.props import Prop
 from models.reservations import (
     Reservation,
@@ -40,8 +45,17 @@ def load_domain_data() -> tuple[list[Prop], list[Reservation]]:
 
 
 def props(request: HttpRequest) -> HttpResponse:
-    """Список предметов реквизита из data/props.json."""
-    props_list, _ = load_domain_data()
+    """Список предметов реквизита из базы данных SQLite."""
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    props_list = conn.execute(
+        """
+        SELECT id, inventory_number, name, category, status
+        FROM props
+        ORDER BY name;
+        """
+    ).fetchall()
+    conn.close()
     context = {
         "props": props_list,
     }
@@ -72,3 +86,71 @@ def prop_detail(request: HttpRequest, prop_id: int) -> HttpResponse:
         context,
         status=404 if prop is None else 200,
     )
+
+
+def available(request: HttpRequest) -> HttpResponse:
+    """Поиск предметов, свободных на выбранную дату.
+
+    Дата приходит из формы параметром GET ?date=ГГГГ-ММ-ДД
+    и подставляется в SQL отдельным параметром ?. Если дата
+    не выбрана, запрос к базе не выполняется: страница
+    показывает только форму поиска.
+    """
+    search_date = request.GET.get("date")
+    props_list = []
+    if search_date:
+        conn = get_connection()
+        conn.row_factory = sqlite3.Row
+        props_list = conn.execute(
+            """
+            SELECT id, inventory_number, name, category, status
+            FROM props
+            WHERE id NOT IN (
+                SELECT prop_id
+                FROM reservations
+                WHERE reservation_date = ?
+                  AND is_cancelled = 0
+            )
+              AND status NOT IN ('утерян', 'списан')
+            ORDER BY name;
+            """,
+            [search_date],
+        ).fetchall()
+        conn.close()
+    context = {
+        "props": props_list,
+        "search_date": search_date,
+    }
+    return render(request, "props/available.html", context)
+
+
+def movements(request: HttpRequest) -> HttpResponse:
+    """Журнал перемещений из SQLite (JOIN трёх таблиц)."""
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    movements_list = conn.execute(
+        """
+        SELECT movements.id,
+               strftime('%d.%m.%Y %H:%M', movements.moved_at)
+                   AS moved_at,
+               movements.movement_type,
+               props.name AS prop_name,
+               props.inventory_number,
+               locations.name AS location_name,
+               employees.full_name AS employee_name,
+               movements.purpose
+        FROM movements
+        JOIN props
+            ON movements.prop_id = props.id
+        LEFT JOIN locations
+            ON movements.location_id = locations.id
+        LEFT JOIN employees
+            ON movements.employee_id = employees.id
+        ORDER BY movements.moved_at DESC, movements.id DESC;
+        """
+    ).fetchall()
+    conn.close()
+    context = {
+        "movements": movements_list,
+    }
+    return render(request, "props/movements.html", context)
