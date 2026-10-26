@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}
+Журнал перемещений – TheaterProps
+{% endblock %}
+
+{% block content %}
+<h1>Журнал перемещений</h1>
+<p class="text-muted">Всего записей: {{ movements|length }}</p>
+
+<ul class="list-group">
+    {% for movement in movements %}
+    <li class="list-group-item">
+        <span class="badge bg-dark">
+            {{ movement.movement_type }}
+        </span>
+        [{{ movement.inventory_number }}]
+        {{ movement.prop_name }} — {{ movement.moved_at }}
+        <br>
+        <small class="text-muted">
+            Локация: {{ movement.location_name|default:"—" }} |
+            Сотрудник: {{ movement.employee_name|default:"—" }}
+        </small>
+        <br>
+        <small>{{ movement.purpose }}</small>
+    </li>
+    {% empty %}
+    <li class="list-group-item">Записей журнала нет.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
