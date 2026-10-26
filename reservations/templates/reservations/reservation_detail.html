@@ -18,8 +18,7 @@
 
         <p class="card-text">
             Предмет:
-            <a href="{% url 'props:prop_detail'
-                      reservation.prop.id %}">
+            <a href="{% url 'props:prop_detail' reservation.prop.id %}">
                 {{ reservation.prop.name }}
             </a>
         </p>
